@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>網頁簡報器</title>
+    <style>
+        body {
+            width: 320px;
+            min-height: 200px;
+            margin: 0;
+            padding: 20px;
+            font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif;
+            background: #f8f9fa;
+            color: #212529;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: bold;
+            color: #000;
+            margin: 0 0 8px 0;
+        }
+
+        .header p {
+            font-size: 12px;
+            color: #6c757d;
+            margin: 0;
+        }
+
+        .main-button {
+            width: 100%;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background: #0066cc;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .main-button:hover {
+            background: #0052a3;
+            transform: translateY(-1px);
+        }
+
+        .main-button:active {
+            transform: translateY(0);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .control-button {
+            padding: 12px;
+            font-size: 14px;
+            color: #495057;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .control-button:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+
+        .status {
+            padding: 12px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+            margin-bottom: 16px;
+        }
+
+        .status-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #6c757d;
+            margin-bottom: 4px;
+        }
+
+        .status-content {
+            font-size: 14px;
+            color: #212529;
+        }
+
+        .shortcuts {
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+            padding: 12px;
+        }
+
+        .shortcuts-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #6c757d;
+            margin-bottom: 8px;
+        }
+
+        .shortcut-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 12px;
+        }
+
+        .shortcut-key {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 10px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 10px;
+            color: #adb5bd;
+        }
+
+        .active {
+            background: #d4edda !important;
+            border-color: #c3e6cb !important;
+            color: #155724 !important;
+        }
+
+        .main-button.active {
+            background: #28a745 !important;
+            color: white !important;
+        }
+
+        .instruction-box {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+
+        .instruction-box h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #1976d2;
+            font-weight: bold;
+        }
+
+        .instruction-box ol {
+            margin: 0;
+            padding-left: 16px;
+            font-size: 12px;
+            color: #424242;
+            line-height: 1.4;
+        }
+
+        .instruction-box li {
+            margin: 4px 0;
+        }
+
+        .api-settings {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+
+        .api-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: #856404;
+        }
+
+        .api-toggle {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 2px;
+        }
+
+        .api-config {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #ffeaa7;
+        }
+
+        .api-config.hidden {
+            display: none;
+        }
+
+        .api-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .api-button {
+            width: 100%;
+            padding: 8px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+
+        .api-button:hover {
+            background: #218838;
+        }
+
+        .api-help {
+            font-size: 10px;
+            color: #6c757d;
+            line-height: 1.3;
+        }
+
+        .api-help a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .api-help a:hover {
+            text-decoration: underline;
+        }
+
+        .model-selection {
+            margin: 12px 0;
+        }
+
+        .model-label {
+            display: block;
+            font-size: 12px;
+            font-weight: bold;
+            color: #6c757d;
+            margin-bottom: 4px;
+        }
+
+        .model-select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            background: white;
+            color: #495057;
+        }
+
+        .model-select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 3px rgba(0, 123, 255, 0.25);
+        }
+
+        /* AI 模型順序設定樣式 */
+        .model-priority-settings {
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .priority-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-size: 14px;
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .priority-toggle {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            color: #6c757d;
+            transition: color 0.2s ease;
+        }
+
+        .priority-toggle:hover {
+            color: #495057;
+        }
+
+        .priority-config {
+            padding: 16px;
+        }
+
+        .priority-config.hidden {
+            display: none;
+        }
+
+        .sortable-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sortable-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            cursor: move;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .sortable-item:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+
+        .sortable-item.dragging {
+            opacity: 0.5;
+            background: #007bff;
+            color: white;
+        }
+
+        .sortable-item.drag-over {
+            border-color: #007bff;
+            background: #e3f2fd;
+        }
+
+        .drag-handle {
+            margin-right: 12px;
+            color: #6c757d;
+            font-size: 16px;
+        }
+
+        .model-info {
+            flex: 1;
+        }
+
+        .model-name {
+            font-weight: bold;
+            font-size: 14px;
+            color: #212529;
+        }
+
+        .model-description {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 2px;
+        }
+
+        .priority-number {
+            background: #007bff;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .priority-help {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 12px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .reset-priority-btn {
+            width: 100%;
+            padding: 8px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 12px;
+        }
+
+        .reset-priority-btn:hover {
+            background: #545b62;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🖥️ 網頁簡報器</h1>
+        <p>大螢幕閱讀優化工具</p>
+    </div>
+
+    <div class="instruction-box">
+        <h3>使用方法</h3>
+        <ol>
+            <li>在網頁上選取要展示的內容</li>
+            <li>右鍵點擊選取文字</li>
+            <li>選擇「啟動簡報模式」</li>
+        </ol>
+    </div>
+
+    <div class="api-settings">
+        <div class="api-title">
+            <span>Google Gemini AI 排版增強 (免費)</span>
+            <button id="apiToggle" class="api-toggle">⚙️</button>
+        </div>
+        <div id="apiConfig" class="api-config hidden">
+            <input type="password" id="geminiApiKey" placeholder="輸入Gemini API金鑰 (免費額度)" class="api-input">
+
+            <div class="model-selection">
+                <label for="geminiModel" class="model-label">預設模型選擇：</label>
+                <select id="geminiModel" class="model-select">
+                    <option value="gemini-1.5-flash">Gemini 1.5 Flash (推薦)</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                    <option value="gemini-1.5-flash-8b">Gemini 1.5 Flash 8B (輕量)</option>
+                    <option value="gemini-1.0-pro">Gemini 1.0 Pro</option>
+                </select>
+            </div>
+
+            <div style="display: flex; gap: 4px;">
+                <button id="saveApiKey" class="api-button" style="flex: 1;">儲存</button>
+                <button id="testApiKey" class="api-button" style="flex: 1; background: #17a2b8;">測試</button>
+            </div>
+
+            <div style="margin-top: 8px;">
+                <button id="saveModelOnly" class="api-button" style="width: 100%; background: #28a745;">僅儲存模型選擇</button>
+            </div>
+            <div class="api-help">
+                免費使用Gemini AI，每日1500次請求額度<br>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank">取得免費API金鑰</a><br>
+                <small>💡 Gemini 1.5 Flash 效能較佳，推薦使用</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="api-settings">
+        <div class="api-title">
+            <span>OpenAI API 模型選擇</span>
+            <button id="openaiApiToggle" class="api-toggle">⚙️</button>
+        </div>
+        <div id="openaiApiConfig" class="api-config hidden">
+            <input type="password" id="openaiApiKey" placeholder="輸入OpenAI API金鑰" class="api-input">
+
+            <div class="model-selection">
+                <label for="openaiModel" class="model-label">模型選擇：</label>
+                <select id="openaiModel" class="model-select">
+                    <option value="gpt-4o-mini">GPT-4o Mini (推薦 - 快速且便宜)</option>
+                    <option value="gpt-4o">GPT-4o (高品質)</option>
+                    <option value="gpt-4">GPT-4 (標準)</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo (經濟實惠)</option>
+                </select>
+            </div>
+
+            <div style="display: flex; gap: 4px;">
+                <button id="saveOpenaiApiKey" class="api-button" style="flex: 1;">儲存</button>
+                <button id="testOpenaiApiKey" class="api-button" style="flex: 1; background: #17a2b8;">測試</button>
+            </div>
+
+            <div style="margin-top: 8px;">
+                <button id="saveOpenaiModelOnly" class="api-button" style="width: 100%; background: #28a745;">僅儲存模型選擇</button>
+            </div>
+            <div class="api-help">
+                每月 $5 免費額度 (約150萬tokens)<br>
+                <a href="https://platform.openai.com/api-keys" target="_blank">取得API金鑰</a><br>
+                <small>💡 GPT-4o Mini 速度快且成本低，推薦使用</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 模型調用順序設定 -->
+    <div class="model-priority-settings">
+        <div class="priority-title">
+            <span>🚀 AI 模型調用順序</span>
+            <button id="priorityToggle" class="priority-toggle">⚙️</button>
+        </div>
+        <div id="priorityConfig" class="priority-config hidden">
+            <div class="priority-help">
+                拖拽以調整 AI 模型的調用順序。系統將依順序嘗試，失敗時自動使用下一個。
+            </div>
+            <ul id="sortableModelList" class="sortable-list">
+                <li class="sortable-item" data-model="gemini" draggable="true">
+                    <span class="drag-handle">⋮⋮</span>
+                    <div class="model-info">
+                        <div class="model-name">Google Gemini</div>
+                        <div class="model-description">免費額度 · 高品質處理 · 中文友好</div>
+                    </div>
+                    <div class="priority-number">1</div>
+                </li>
+                <li class="sortable-item" data-model="openai" draggable="true">
+                    <span class="drag-handle">⋮⋮</span>
+                    <div class="model-info">
+                        <div class="model-name">OpenAI GPT</div>
+                        <div class="model-description">高速處理 · 穩定可靠 · 多模型選擇</div>
+                    </div>
+                    <div class="priority-number">2</div>
+                </li>
+                <li class="sortable-item" data-model="manual" draggable="true">
+                    <span class="drag-handle">⋮⋮</span>
+                    <div class="model-info">
+                        <div class="model-name">離線排版</div>
+                        <div class="model-description">離線處理 · 快速響應 · 基礎格式化</div>
+                    </div>
+                    <div class="priority-number">3</div>
+                </li>
+            </ul>
+            <button id="resetPriority" class="reset-priority-btn">重設為預設順序</button>
+        </div>
+    </div>
+
+    <button id="toggleReader" class="main-button">
+        快速啟動（需先選取文字）
+    </button>
+
+    <div class="controls">
+        <button id="fontIncrease" class="control-button" title="放大字體">
+            🔍+ 放大
+        </button>
+        <button id="fontDecrease" class="control-button" title="縮小字體">
+            🔍- 縮小
+        </button>
+        <button id="highContrast" class="control-button" title="高對比模式">
+            ◐ 對比
+        </button>
+        <button id="focusMode" class="control-button" title="聚焦模式">
+            ◎ 聚焦
+        </button>
+    </div>
+
+    <div class="status">
+        <div class="status-title">目前狀態</div>
+        <div class="status-content" id="currentStatus">
+            未啟動
+        </div>
+    </div>
+
+    <div class="shortcuts">
+        <div class="shortcuts-title">快捷鍵（簡報模式中）</div>
+        <div class="shortcut-item">
+            <span>關閉模式</span>
+            <span class="shortcut-key">Esc</span>
+        </div>
+        <div class="shortcut-item">
+            <span>放大字體</span>
+            <span class="shortcut-key">Ctrl++</span>
+        </div>
+        <div class="shortcut-item">
+            <span>縮小字體</span>
+            <span class="shortcut-key">Ctrl+-</span>
+        </div>
+        <div class="shortcut-item">
+            <span>全螢幕</span>
+            <span class="shortcut-key">F11</span>
+        </div>
+    </div>
+
+    <div class="footer">
+        v1.0.0 | 會議室專用閱讀工具
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

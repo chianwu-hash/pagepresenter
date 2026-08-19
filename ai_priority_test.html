@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 模型優先順序功能測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #17a2b8;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .feature-section {
+            border-left-color: #6f42c1;
+            background: #e2e3f0;
+        }
+        .test-content {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .code {
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 5px 0;
+        }
+        h2 {
+            color: #495057;
+            margin-top: 0;
+        }
+        .step {
+            margin: 15px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+        .step-number {
+            background: #007bff;
+            color: white;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 AI 模型優先順序功能測試</h1>
+
+    <div class="feature-section">
+        <h2>新功能概述</h2>
+        <p>已成功新增 AI 模型調用優先順序選擇功能，允許使用者自定義不同 AI 模型的調用順序。</p>
+
+        <h3>✅ 已實現的功能</h3>
+        <ul>
+            <li><strong>拖拽排序界面</strong>：使用者可透過拖拽調整模型順序</li>
+            <li><strong>三種模型支援</strong>：Google Gemini、OpenAI GPT、離線排版</li>
+            <li><strong>動態調用邏輯</strong>：系統按照用戶設定的順序嘗試各個模型</li>
+            <li><strong>設定持久化</strong>：順序設定自動保存到 Chrome Storage</li>
+            <li><strong>錯誤降級機制</strong>：當前模型失敗時自動嘗試下一個</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🧪 測試步驟</h2>
+
+        <div class="step">
+            <span class="step-number">1</span>
+            <strong>載入擴充功能</strong>
+            <div class="code">chrome://extensions/ → 重新載入網頁簡報器擴充功能</div>
+        </div>
+
+        <div class="step">
+            <span class="step-number">2</span>
+            <strong>開啟優先順序設定</strong>
+            <p>點擊擴充功能圖示 → 找到「🚀 AI 模型調用順序」區塊 → 點擊 ⚙️ 設定按鈕</p>
+        </div>
+
+        <div class="step">
+            <span class="step-number">3</span>
+            <strong>測試拖拽排序</strong>
+            <p>嘗試拖拽三個模型項目調整順序：</p>
+            <ul>
+                <li>Google Gemini（免費額度 · 高品質處理 · 中文友好）</li>
+                <li>OpenAI GPT（高速處理 · 穩定可靠 · 多模型選擇）</li>
+                <li>離線排版（離線處理 · 快速響應 · 基礎格式化）</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <span class="step-number">4</span>
+            <strong>驗證順序保存</strong>
+            <p>調整順序後，重新開啟擴充功能彈出視窗，確認順序已保存。</p>
+        </div>
+
+        <div class="step">
+            <span class="step-number">5</span>
+            <strong>測試實際調用</strong>
+            <p>選取以下測試內容並啟動簡報模式，觀察 console.log 輸出確認調用順序：</p>
+        </div>
+    </div>
+
+    <div class="test-content">
+        <h2>測試用文字內容</h2>
+        <p>這是一段測試文字，用於驗證 AI 模型優先順序功能。系統應該按照使用者設定的順序依序嘗試不同的 AI 模型進行處理。</p>
+
+        <h3>主要測試點</h3>
+        <ul>
+            <li>模型調用順序是否正確</li>
+            <li>錯誤處理和降級機制</li>
+            <li>設定保存和載入功能</li>
+            <li>拖拽排序的使用者體驗</li>
+        </ul>
+
+        <h3>預期行為</h3>
+        <p>當啟動簡報模式時，系統會在 Console 中顯示類似以下的訊息：</p>
+        <div class="code">
+            🚀 使用模型優先順序: ["gemini", "openai", "manual"]<br>
+            🔄 嘗試使用 Gemini (gemini)...<br>
+            ✅ Gemini 處理成功
+        </div>
+
+        <p>如果第一個模型失敗，會自動嘗試下一個：</p>
+        <div class="code">
+            🚀 使用模型優先順序: ["openai", "gemini", "manual"]<br>
+            🔄 嘗試使用 OpenAI (openai)...<br>
+            ⚠️ OpenAI 處理失敗: API key not found<br>
+            🔄 嘗試使用 Gemini (gemini)...<br>
+            ✅ Gemini 處理成功
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>🔍 檢查重點</h2>
+
+        <div class="highlight">
+            <strong>UI 功能檢查</strong>
+            <ul>
+                <li>拖拽排序是否平滑運作</li>
+                <li>優先順序數字是否正確更新</li>
+                <li>重設按鈕是否正常工作</li>
+                <li>設定區塊的展開/收合功能</li>
+            </ul>
+        </div>
+
+        <div class="highlight">
+            <strong>功能邏輯檢查</strong>
+            <ul>
+                <li>Storage 中的 modelPriority 設定是否正確保存</li>
+                <li>AI 調用是否按照設定的順序執行</li>
+                <li>錯誤降級機制是否正常運作</li>
+                <li>Console 日誌是否清楚顯示處理流程</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="success">
+        <h2>✅ 預期成果</h2>
+        <p>完成測試後，使用者應該能夠：</p>
+        <ul>
+            <li>透過直觀的拖拽操作調整 AI 模型的優先順序</li>
+            <li>系統依照設定順序智能調用不同的 AI 模型</li>
+            <li>當某個模型無法使用時，自動降級到下一個可用模型</li>
+            <li>享受更靈活和個人化的 AI 處理體驗</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🛠️ 故障排除</h2>
+
+        <h3>常見問題</h3>
+        <ul>
+            <li><strong>拖拽無反應</strong>：檢查 JavaScript 錯誤，確認事件監聽器正確綁定</li>
+            <li><strong>順序未保存</strong>：檢查 Chrome Storage 權限，確認 storage API 可正常使用</li>
+            <li><strong>調用順序錯誤</strong>：檢查 content.js 中的 getModelPriority() 方法</li>
+            <li><strong>模型調用失敗</strong>：檢查 API 金鑰設定和網路連線</li>
+        </ul>
+
+        <h3>除錯方法</h3>
+        <ul>
+            <li>開啟 Chrome 開發者工具查看 Console 日誌</li>
+            <li>檢查 Application → Storage → Local Storage 中的設定值</li>
+            <li>使用 chrome://extensions/ 查看擴充功能錯誤</li>
+        </ul>
+    </div>
+
+    <script>
+        // 簡單的測試腳本
+        console.log('🧪 AI 優先順序測試頁面已載入');
+        console.log('📋 請按照步驟進行測試，並觀察 Console 輸出');
+
+        // 測試用的文字選取提示
+        document.addEventListener('DOMContentLoaded', () => {
+            const testContent = document.querySelector('.test-content');
+            if (testContent) {
+                testContent.addEventListener('mouseup', () => {
+                    const selection = window.getSelection().toString();
+                    if (selection.length > 10) {
+                        console.log('✅ 已選取測試文字，可以右鍵啟動簡報模式進行測試');
+                        console.log('📝 選取內容長度:', selection.length, '字元');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

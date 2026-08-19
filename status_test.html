@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>狀態顯示測試頁面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; border-left: 4px solid #e74c3c; padding-left: 15px; margin-top: 30px; }
+        .test-content {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-left: 4px solid #007bff;
+            margin: 15px 0;
+        }
+        .instruction {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .highlight {
+            background-color: #ffeb3b;
+            padding: 2px 4px;
+            font-weight: bold;
+        }
+        ul, ol { margin: 15px 0; padding-left: 25px; }
+        li { margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 網頁簡報器 - 動態狀態顯示測試</h1>
+
+        <div class="instruction">
+            <strong>📋 測試指南：</strong>
+            <ol>
+                <li>選取下方任何一段測試內容</li>
+                <li>右鍵選擇「啟動簡報模式」</li>
+                <li>觀察狀態列的動態變化：
+                    <ul>
+                        <li>⏳ <strong>AI 精簡版生成中...</strong> （黃色通知）</li>
+                        <li>✅ <strong>AI 精簡版處理完成</strong> （綠色通知）</li>
+                        <li>⏳ <strong>AI 原文版生成中...</strong> （黃色通知）</li>
+                        <li>✅ <strong>AI 處理完成</strong> （綠色通知）</li>
+                    </ul>
+                </li>
+                <li>檢查工具列右側的狀態變化</li>
+                <li>觀察右上角浮動通知的樣式和動畫</li>
+            </ol>
+        </div>
+
+        <h2>測試內容一：短文本處理測試</h2>
+        <div class="test-content">
+            <p><strong>人工智慧技術發展現況</strong></p>
+            <p>近年來，人工智慧技術在各個領域都有突破性的進展。從自然語言處理到電腦視覺，從機器學習到深度學習，AI正在改變我們的生活方式。</p>
+            <ul>
+                <li>自然語言處理：GPT、BERT等模型的出現</li>
+                <li>電腦視覺：影像識別準確度大幅提升</li>
+                <li>語音識別：接近人類水準的辨識能力</li>
+                <li>自動駕駛：從L2到L4級別的技術突破</li>
+            </ul>
+            <p>這些技術的發展，不僅提升了效率，也為創新應用開啟了無限可能。</p>
+        </div>
+
+        <h2>測試內容二：中長文本處理測試</h2>
+        <div class="test-content">
+            <h3>雲端運算架構設計原則</h3>
+            <p>在設計雲端運算架構時，需要考慮多個關鍵因素，以確保系統的<span class="highlight">可擴展性</span>、<span class="highlight">可靠性</span>和<span class="highlight">安全性</span>。</p>
+
+            <h4>1. 可擴展性設計</h4>
+            <ul>
+                <li><strong>水平擴展</strong>：透過增加伺服器數量來提升處理能力</li>
+                <li><strong>垂直擴展</strong>：提升單一伺服器的硬體規格</li>
+                <li><strong>自動擴展</strong>：根據負載自動調整資源配置</li>
+                <li><strong>負載均衡</strong>：合理分配請求到不同的伺服器節點</li>
+            </ul>
+
+            <h4>2. 高可用性保證</h4>
+            <ol>
+                <li>多區域部署：避免單點故障</li>
+                <li>資料備份策略：確保資料安全</li>
+                <li>災難恢復計劃：快速恢復服務</li>
+                <li>健康檢查機制：即時監控系統狀態</li>
+            </ol>
+
+            <h4>3. 安全性考量</h4>
+            <p>資訊安全是雲端架構的核心考量之一。需要從多個層面建立完整的安全防護體系：</p>
+            <ul>
+                <li>網路安全：防火牆、VPN、DDoS防護</li>
+                <li>身份驗證：多因子認證、OAuth 2.0</li>
+                <li>資料加密：傳輸加密、儲存加密</li>
+                <li>存取控制：角色權限管理、最小權限原則</li>
+                <li>稽核日誌：完整記錄所有操作行為</li>
+            </ul>
+
+            <p>透過這些設計原則的實施，可以建立一個穩定、安全、高效的雲端運算環境，滿足企業數位轉型的需求。</p>
+        </div>
+
+        <h2>測試內容三：複雜結構測試</h2>
+        <div class="test-content">
+            <h3>專案管理最佳實務</h3>
+
+            <h4>📊 專案規劃階段</h4>
+            <p>專案成功的關鍵在於詳細的規劃和準備工作：</p>
+            <ol>
+                <li><strong>需求分析</strong>
+                    <ul>
+                        <li>收集利害關係人需求</li>
+                        <li>定義專案範圍和目標</li>
+                        <li>分析技術可行性</li>
+                        <li>評估風險和挑戰</li>
+                    </ul>
+                </li>
+                <li><strong>資源配置</strong>
+                    <ul>
+                        <li>團隊成員技能評估</li>
+                        <li>預算編列和控制</li>
+                        <li>時程規劃和里程碑設定</li>
+                        <li>工具和環境準備</li>
+                    </ul>
+                </li>
+                <li><strong>風險管理</strong>
+                    <ul>
+                        <li>識別潛在風險</li>
+                        <li>制定因應策略</li>
+                        <li>建立監控機制</li>
+                        <li>準備應變計劃</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <h4>⚙️ 執行監控階段</h4>
+            <p>在專案執行過程中，持續監控和調整是確保專案成功的重要環節：</p>
+
+            <p><strong>進度追蹤方法：</strong></p>
+            <ul>
+                <li>每日站立會議（Daily Standup）</li>
+                <li>週報和月報制度</li>
+                <li>里程碑檢核點</li>
+                <li>關鍵績效指標（KPI）監控</li>
+            </ul>
+
+            <p><strong>品質保證措施：</strong></p>
+            <ul>
+                <li>程式碼審查（Code Review）</li>
+                <li>自動化測試流程</li>
+                <li>使用者接受度測試</li>
+                <li>效能與安全性測試</li>
+            </ul>
+
+            <h4>🎯 專案收尾階段</h4>
+            <p>專案的圓滿結束同樣重要，需要完成以下工作：</p>
+            <ol>
+                <li>交付物驗收和移交</li>
+                <li>專案成果評估</li>
+                <li>經驗教訓總結</li>
+                <li>團隊表彰和慶祝</li>
+                <li>後續維護計劃</li>
+            </ol>
+
+            <p>透過系統性的專案管理方法，可以大幅提升專案成功率，並累積寶貴的經驗知識。</p>
+        </div>
+
+        <div class="instruction">
+            <strong>🔍 預期觀察結果：</strong>
+            <ul>
+                <li>工具列狀態會動態顯示：「處理中」→「已完成」</li>
+                <li>右上角會出現對應顏色的浮動通知</li>
+                <li>處理中顯示黃色 ⏳，完成顯示綠色 ✅</li>
+                <li>錯誤狀況顯示紅色 ❌</li>
+                <li>狀態變化平滑且直觀</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

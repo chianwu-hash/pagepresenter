@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 離線版文本處理改進測試</title>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 4px solid #e74c3c;
+            padding-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h2 {
+            color: #34495e;
+            border-left: 5px solid #3498db;
+            padding-left: 20px;
+            margin-top: 35px;
+        }
+        .improvement-highlight {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .test-content {
+            background-color: #f8f9fa;
+            padding: 25px;
+            border-left: 5px solid #007bff;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .problem-demo {
+            background-color: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .problem-demo h4 {
+            color: #856404;
+            margin-top: 0;
+        }
+        .fix-explanation {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .fix-explanation h4 {
+            color: #155724;
+            margin-top: 0;
+        }
+        .instruction {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .code-example {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        ul, ol { margin: 15px 0; padding-left: 25px; }
+        li { margin-bottom: 8px; }
+        .highlight {
+            background-color: #ffeb3b;
+            padding: 2px 6px;
+            font-weight: bold;
+            border-radius: 3px;
+        }
+        .timestamp-demo {
+            color: #6c757d;
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 0 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔧 離線版文本處理改進測試</h1>
+
+        <div class="improvement-highlight">
+            <h3>🎯 關鍵改進項目</h3>
+            <ul>
+                <li><strong>時間標記保護</strong>：修復 [14:05] 被錯誤換行的問題</li>
+                <li><strong>編號列表識別</strong>：改進 2.1、3.2 等小數點編號識別</li>
+                <li><strong>智能換行判斷</strong>：優化段落分隔和內容連接</li>
+                <li><strong>數據格式保持</strong>：確保「指標：數值」在同一行顯示</li>
+            </ul>
+        </div>
+
+        <div class="instruction">
+            <strong>🧪 測試方法：</strong>
+            <ol>
+                <li>選取下方任一測試區域的內容</li>
+                <li>右鍵選擇「啟動簡報模式」</li>
+                <li>觀察離線版的處理效果</li>
+                <li>對比改進前後的差異</li>
+            </ol>
+        </div>
+
+        <h2>測試區域 1：時間標記問題修復</h2>
+
+        <div class="problem-demo">
+            <h4>❌ 原本的問題</h4>
+            <p>時間標記會被錯誤換行，例如：</p>
+            <p>一、會議開場與背景說明</p>
+            <p><span class="timestamp-demo">[14:05]</span> <em>← 這個時間標記會被分到下一行</em></p>
+        </div>
+
+        <div class="fix-explanation">
+            <h4>✅ 修復方法</h4>
+            <p>透過先保護時間標記，再進行文本處理，確保時間標記與前面內容保持在同一行。</p>
+        </div>
+
+        <div class="test-content">
+            <p>一、會議開場與背景說明 [14:05] 張執行長開場致詞，說明本次會議目的是制定2025年第一季的產品策略方向，確保公司在快速變化的市場環境中保持競爭優勢。強調今年將是公司轉型的關鍵年，需要在數位化轉型、AI技術應用、以及客戶體驗優化三個面向上取得重大突破。</p>
+
+            <p>二、2024年第四季產品表現回顧 [14:15] 產品部王總監報告2024年第四季各產品線表現：智慧家居產品線營收達成率108%，超出目標8%；用戶滿意度4.2/5.0，較第三季提升0.3分。</p>
+
+            <p>三、技術創新成果評估 [14:45] 技術部陳總監報告Q4技術創新項目進展：智能客服系統準確率從78%提升至89%，平均回應時間從45秒縮短至12秒。</p>
+        </div>
+
+        <h2>測試區域 2：編號列表識別改進</h2>
+
+        <div class="problem-demo">
+            <h4>❌ 原本的問題</h4>
+            <p>小數點編號（如 2.1）無法正確識別為列表項目，編號會消失。</p>
+        </div>
+
+        <div class="fix-explanation">
+            <h4>✅ 修復方法</h4>
+            <p>增強 <code>isListItem()</code> 函數，新增對 <code>2.1 內容格式</code> 的識別模式。</p>
+        </div>
+
+        <div class="test-content">
+            <h3>2024年第四季產品表現分析</h3>
+
+            <p>2.1 核心產品線表現分析 [14:15] 產品部王總監報告2024年第四季各產品線表現：</p>
+
+            <p>2.1.1 智慧家居產品線 營收達成率：108%，超出目標8% 用戶滿意度：4.2/5.0，較第三季提升0.3分 主要成長驅動因素：語音控制功能優化、價格策略調整 挑戰：供應鏈成本上升15%，影響毛利率</p>
+
+            <p>2.2 企業軟體解決方案 營收達成率：95%，略低於預期 新客戶獲取數量：142家，達成目標的89% 客戶續約率：93%，維持高水準</p>
+
+            <p>2.3 移動應用服務 月活躍用戶數：280萬，年成長率35% 用戶付費轉換率：12.5%，較目標高出2.5% 平均每用戶收益：$45，季成長8%</p>
+
+            <p>3.1 預測性維護算法 設備故障預測準確率達85% 維護成本降低30% 設備停機時間減少50% 已在3個主要生產基地完成部署</p>
+        </div>
+
+        <h2>測試區域 3：智能換行與數據格式</h2>
+
+        <div class="problem-demo">
+            <h4>❌ 原本的問題</h4>
+            <p>數據項目被錯誤分行，如「營收達成率」和「108%」分在不同行。</p>
+        </div>
+
+        <div class="fix-explanation">
+            <h4>✅ 修復方法</h4>
+            <p>識別「指標名稱：數值」模式，確保在同一行顯示。改進段落換行判斷邏輯。</p>
+        </div>
+
+        <div class="test-content">
+            <h3>2025年第一季產品開發優先順序排定</h3>
+
+            <p>經過各部門充分討論，決定第一季優先開發項目如下：</p>
+
+            <p>AI智能客服2.0 預計開發時間：10週 預算需求：450萬元 目標：支援多語言、情感分析、主動服務推薦 負責團隊：技術部AI組 + 產品部UX組</p>
+
+            <p>智慧家居生態系統整合平台 預計開發時間：12週 預算需求：680萬元 目標：統一控制介面、跨品牌設備支援、場景自動化 市場潛力：預估首年可創造1.2億元營收</p>
+
+            <p>企業數據分析儀表板 預計開發時間：8週 預算需求：320萬元 目標：即時數據視覺化、自訂報表、AI洞察建議 目標客戶：中小企業管理層</p>
+
+            <p>資源配置與預算規劃 2025年第一季總預算：新台幣3.8億元，分配如下：研發投入：1.8億元（佔比47%） AI技術研發：6,500萬元 產品開發：7,200萬元 基礎設施建設：3,800萬元</p>
+        </div>
+
+        <h2>測試區域 4：會議記錄完整測試</h2>
+
+        <div class="test-content">
+            <h3>風險評估與因應措施</h3>
+
+            <p>[16:50] 風險管理小組提出Q1主要風險項目與因應策略：</p>
+
+            <p>1. 技術人才短缺風險 影響：可能導致開發進度延遲20-30% 因應：提高薪資競爭力、加強實習生培育、考慮遠端招募 負責人：人事部黃總監</p>
+
+            <p>2. 供應鏈成本波動 影響：可能影響毛利率5-8% 因應：多元化供應商策略、長期合約鎖定價格、庫存管理優化 負責人：營運部王副總</p>
+
+            <p>3. 市場競爭加劇 影響：可能影響市佔率和獲客成本 因應：加速產品差異化、強化客戶關係、提升品牌價值 負責人：行銷部林總監</p>
+
+            <p>行動計劃與執行時程 [17:15] 張執行長總結會議重點決議：</p>
+
+            <p>1月第3週：完成詳細項目規劃書 1月第4週：啟動人才招募計劃 2月第1週：AI智能客服2.0開發啟動 2月第2週：智慧家居平台技術驗證 2月第3週：第一次項目進度審查</p>
+
+            <p>會議決議與後續追蹤 正式決議事項：批准2025年第一季產品開發計劃，總預算3.8億元 AI智能客服2.0為最高優先級項目，必須如期完成 立即啟動人才招募計劃，目標2月底前到位率達80%</p>
+        </div>
+
+        <div class="problem-demo">
+            <h4>🔍 觀察重點</h4>
+            <ul>
+                <li><span class="highlight">時間標記</span>：[14:05]、[16:50] 等應該與前面內容在同一行</li>
+                <li><span class="highlight">編號識別</span>：2.1、3.1 等應該被正確識別為列表項目</li>
+                <li><span class="highlight">數據格式</span>：「營收達成率：108%」應該在同一行</li>
+                <li><span class="highlight">段落分隔</span>：主要章節之間應該有適當的換行</li>
+                <li><span class="highlight">內容連接</span>：相關數據不應該被過度拆分</li>
+            </ul>
+        </div>
+
+        <div class="improvement-highlight">
+            <h4>✨ 預期改進效果</h4>
+            <ul>
+                <li>時間標記不再被錯誤換行</li>
+                <li>編號列表正確顯示</li>
+                <li>數據項目格式整齊</li>
+                <li>段落結構更清晰</li>
+                <li>整體可讀性大幅提升</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

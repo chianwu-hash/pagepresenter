@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown 符號問題修正測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .fix-section {
+            background: #d4edda;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+        .test-content {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .before-after {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .before, .after {
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .before {
+            background: #ffe6e6;
+        }
+        .after {
+            background: #e6ffe6;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        code {
+            background: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+            color: #e83e8c;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Markdown 符號問題修正測試</h1>
+
+    <div class="fix-section">
+        <h2>✅ 問題已修正</h2>
+        <p>根據截圖中發現的問題，已修正離線排版中出現的 Markdown 符號：</p>
+        <ul>
+            <li><strong>移除 <code>###</code> 符號</strong>：標題不再顯示 Markdown 符號</li>
+            <li><strong>清理 <code>-</code> 符號</strong>：條列項目不再顯示重複的條列符號</li>
+            <li><strong>優化預處理邏輯</strong>：避免產生會影響顯示的 Markdown 語法</li>
+        </ul>
+    </div>
+
+    <div class="before-after">
+        <div class="before">
+            <h3>❌ 修正前（截圖中的問題）</h3>
+            <ul>
+                <li><code>### 教學目標認知方面：</code></li>
+                <li><code>- • 理解現代詩歌的特色...</code></li>
+                <li><code>- • 覺察「你我之間」的差異性...</code></li>
+            </ul>
+            <p>用戶看到不應該顯示的 Markdown 語法符號</p>
+        </div>
+        <div class="after">
+            <h3>✅ 修正後（預期效果）</h3>
+            <ul>
+                <li><strong>教學目標認知方面：</strong></li>
+                <li>• 理解現代詩歌的特色...</li>
+                <li>• 覺察「你我之間」的差異性...</li>
+            </ul>
+            <p>乾淨的顯示，無多餘符號</p>
+        </div>
+    </div>
+
+    <div class="test-content">
+        <h2>📝 測試內容（仿照截圖）</h2>
+        <p>請選取以下內容測試離線排版效果：</p>
+
+        <div style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+            教學目標認知方面： • 理解現代詩歌的特色與含意，並能連結生活事物進行想像。 • 覺察「你我之間」的差異性與互補性。 • 理解課文中「人際相處」的智慧，包含尊重、寬容與合作的重要性。 • 能讀懂課文內容、大意與主旨，並理解詩作的主題與象徵關係。 • 認識本課生字詞的多音字、易錯發音及字形辨別，並了解字義和造詞。 • 理解四段式記敘文的寫作結構與常用修辭手法。技能方面： • 能專心聆聽詩歌重點，並透過適當的表情、動作朗讀詩歌。 • 運用語調、表情、肢體輔助口語表達詩歌內容。
+        </div>
+    </div>
+
+    <div class="highlight">
+        <h3>🔍 檢查重點</h3>
+        <ol>
+            <li><strong>標題顯示</strong>：「教學目標認知方面：」應該顯示為標題，不應有 <code>###</code> 符號</li>
+            <li><strong>條列項目</strong>：「• 理解現代詩歌...」應該顯示為條列，不應有前綴的 <code>-</code> 符號</li>
+            <li><strong>整體結構</strong>：內容應該有適當的段落分隔，但不顯示 Markdown 語法</li>
+            <li><strong>Visual 效果</strong>：版面清潔，沒有技術符號干擾閱讀</li>
+        </ol>
+    </div>
+
+    <div class="fix-section">
+        <h3>🛠️ 技術修正說明</h3>
+        <ol>
+            <li><strong>移除 Markdown 標題生成</strong>：預處理不再產生 <code>###</code> 符號</li>
+            <li><strong>增強標題清理</strong>：處理時自動清理 <code>###</code> 符號</li>
+            <li><strong>條列符號清理</strong>：移除重複的 <code>- •</code> 組合</li>
+            <li><strong>識別規則調整</strong>：移除對 Markdown 符號的依賴</li>
+        </ol>
+    </div>
+
+    <script>
+        console.log('🔧 Markdown 符號修正測試頁面已載入');
+        console.log('🎯 主要修正：移除離線排版中的 ### 和 - 符號顯示問題');
+
+        // 文字選取提示
+        document.addEventListener('mouseup', () => {
+            const selection = window.getSelection().toString();
+            if (selection.length > 30) {
+                console.log(`✅ 已選取測試內容，長度: ${selection.length} 字元`);
+                console.log('📝 請右鍵啟動簡報模式測試修正效果');
+                console.log('🔍 檢查是否還有 ### 或 - 符號顯示');
+            }
+        });
+
+        // 提示檢查重點
+        setTimeout(() => {
+            console.log('📋 檢查重點：');
+            console.log('  1. 標題不應顯示 ### 符號');
+            console.log('  2. 條列不應顯示 - 符號');
+            console.log('  3. 整體版面應該乾淨整潔');
+        }, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>正規表達式測試</title>
+</head>
+<body>
+    <script>
+    // 測試正規表達式
+    const pattern = /^[一二三四五六七八九十]+[、．]/;
+
+    const testCases = [
+        "一、會議開場與背景說明",
+        "二、2024年第四季產品表現回顧",
+        "三、技術創新成果評估",
+        "四、2025年市場趨勢與競爭環境分析",
+        "五、第一季產品開發策略",
+        "六、資源配置與預算規劃",
+        "七、風險評估與因應措施",
+        "八、行動計劃與執行時程"
+    ];
+
+    console.log("=== 正規表達式測試結果 ===");
+    testCases.forEach((testCase, index) => {
+        const result = pattern.test(testCase);
+        console.log(`${index + 1}. "${testCase}" -> ${result ? '✅ 匹配' : '❌ 不匹配'}`);
+
+        // 檢查字符編碼
+        const firstChar = testCase.charAt(0);
+        console.log(`   首字符: "${firstChar}" (Unicode: ${firstChar.charCodeAt(0)})`);
+    });
+    </script>
+</body>
+</html>

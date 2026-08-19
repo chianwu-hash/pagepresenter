@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>標題識別測試</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 40px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-content {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            background-color: #fafafa;
+        }
+        h1 { color: #2c3e50; }
+        h2 { color: #e74c3c; }
+        .expected { color: #27ae60; font-weight: bold; }
+        .issue { color: #e74c3c; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 標題識別邏輯測試</h1>
+
+        <h2>測試目的</h2>
+        <p>驗證離線排版模式下的標題識別修正效果，確保：</p>
+        <ul>
+            <li class="expected">✅ 【定期評量】 正確識別為標題並顯示粗體</li>
+            <li class="issue">❌ 長描述句子不應該被誤判為標題</li>
+        </ul>
+
+        <div class="test-content">
+            <h2>測試內容 - 請選取以下內容進行測試：</h2>
+
+            <p>(教務處 萬興國 於 114-09-23 08:41 新增 / 114-09-24 08:34 修改) 【定期評量】期中命題從下週開始：09/29(一)～10/12(日)進行命題作業 其餘相關命題事項已Email至老師公務信箱，請老師們收信參閱。</p>
+
+            <p>【新北市114學年度學生美術比賽】新北市學生美術比賽已完成網路報名作業，09/30(二)上午送件至中和國中，作品不論入選與否，比賽結束均會退件。</p>
+
+            <p>【重要通知】請各位老師注意以下事項。</p>
+
+            <p>新北市學生美術比賽已完成網路報名作業，09/30(二)上午送件至中和國中，作品不論入選與否，比賽結束均會退件。</p>
+
+            <p>教學目標：培養學生創造力與美感素養。</p>
+
+            <p>第一章 課程規劃與設計</p>
+
+            <p>一、基本概念</p>
+
+            <p>(一) 教學方法</p>
+        </div>
+
+        <h2>預期結果</h2>
+        <div style="background-color: #e8f5e8; padding: 15px; border-left: 4px solid #27ae60;">
+            <p><strong>應該顯示為標題（粗體）的內容：</strong></p>
+            <ul>
+                <li>【定期評量】</li>
+                <li>【新北市114學年度學生美術比賽】</li>
+                <li>【重要通知】</li>
+                <li>教學目標：</li>
+                <li>第一章 課程規劃與設計</li>
+                <li>一、基本概念</li>
+                <li>(一) 教學方法</li>
+            </ul>
+        </div>
+
+        <div style="background-color: #fdf2f2; padding: 15px; border-left: 4px solid #e74c3c;">
+            <p><strong>不應該顯示為標題的內容：</strong></p>
+            <ul>
+                <li>期中命題從下週開始：09/29(一)～10/12(日)進行命題作業 其餘相關命題事項已Email至老師公務信箱，請老師們收信參閱。</li>
+                <li>新北市學生美術比賽已完成網路報名作業，09/30(二)上午送件至中和國中，作品不論入選與否，比賽結束均會退件。</li>
+                <li>請各位老師注意以下事項。</li>
+            </ul>
+        </div>
+
+        <h2>修正要點</h2>
+        <ul>
+            <li>✅ 修正 <code>【】</code> 括號規則：從 <code>/^【.*】$/</code> 改為 <code>/^【.*?】(?![^【】]*【)/</code>，支援部分匹配</li>
+            <li>✅ 加強長句排除：新增超過50字且以句號結尾的句子排除規則</li>
+            <li>✅ 新增動作描述排除：<code>/已完成|已結束|將於|預計|預定|計劃/</code></li>
+            <li>✅ 新增請求語句排除：<code>/請.*參閱|請.*配合|請.*注意/</code></li>
+            <li>✅ 收緊中等特徵判斷：長度限制從40字降為25字，並排除包含「已」「將」「請」的內容</li>
+        </ul>
+
+        <h2>使用說明</h2>
+        <ol>
+            <li>選取上方「測試內容」中的文字</li>
+            <li>右鍵選擇「啟動簡報模式」</li>
+            <li>觀察標題識別和粗體顯示效果</li>
+            <li>確認是否符合預期結果</li>
+        </ol>
+    </div>
+
+    <script>
+        console.log('🧪 標題識別測試頁面已載入');
+        console.log('📝 請選取測試內容並右鍵啟動簡報模式');
+        console.log('🎯 主要測試項目：');
+        console.log('  - 【】括號標題是否正確識別');
+        console.log('  - 長句子是否避免誤判');
+        console.log('  - 動作描述語句是否正確排除');
+    </script>
+</body>
+</html>

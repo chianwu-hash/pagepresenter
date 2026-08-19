@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📏 長標題識別測試</title>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 4px solid #9b59b6;
+            padding-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h2 {
+            color: #34495e;
+            border-left: 5px solid #e67e22;
+            padding-left: 20px;
+            margin-top: 35px;
+        }
+        .problem-highlight {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .solution-highlight {
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .test-content {
+            background-color: #f8f9fa;
+            padding: 25px;
+            border-left: 5px solid #007bff;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .length-demo {
+            background-color: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .length-demo .char-count {
+            color: #856404;
+            font-weight: bold;
+            float: right;
+        }
+        .fix-explanation {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .fix-explanation h4 {
+            color: #155724;
+            margin-top: 0;
+        }
+        .instruction {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .code-fix {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .highlight {
+            background-color: #ffeb3b;
+            padding: 2px 6px;
+            font-weight: bold;
+            border-radius: 3px;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 0 3px;
+        }
+        .char-counter {
+            font-size: 12px;
+            color: #6c757d;
+            font-family: monospace;
+            float: right;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>📏 長標題識別測試</h1>
+
+        <div class="problem-highlight">
+            <h3>❌ 發現的問題</h3>
+            <p>前五個中文序號標題正常，第六個開始失效！</p>
+            <ul>
+                <li>「一、」到「五、」：正確顯示為標題格式</li>
+                <li>「六、」開始：變成段落格式</li>
+            </ul>
+            <p><strong>原因</strong>：80字長度限制阻擋了長標題的識別</p>
+        </div>
+
+        <div class="length-demo">
+            <div>六、資源配置與預算規劃 [16:25] 人事部黃總監報告Q1人力需求與配置計劃：技術部門新增AI工程師8名、資深前端開發者5名、DevOps工程師3名。</div>
+            <div class="char-count">字數統計：約95字（超過80字限制）</div>
+        </div>
+
+        <div class="solution-highlight">
+            <h3>✅ 解決方案</h3>
+            <p>調整檢查邏輯順序：<strong>強標題特徵優先於長度限制</strong></p>
+            <ol>
+                <li><strong>最優先</strong>：檢查強標題特徵（中文序號、數字序號等）</li>
+                <li><strong>直接返回</strong>：符合強標題特徵 → 立即 return true</li>
+                <li><strong>不受影響</strong>：跳過長度限制和排除規則</li>
+                <li><strong>保證一致</strong>：所有中文序號都能正確識別</li>
+            </ol>
+        </div>
+
+        <div class="fix-explanation">
+            <h4>💻 技術修復</h4>
+            <div class="code-fix">// 修復前：長度限制在前
+if (trimmed.length > 80) return false;  ← 阻擋長標題
+if (strongHeaderPatterns.test(trimmed)) return true;
+
+// 修復後：強標題特徵在前
+if (strongHeaderPatterns.test(trimmed)) return true;  ← 優先保護
+if (trimmed.length > 80) return false;</div>
+        </div>
+
+        <div class="instruction">
+            <strong>🧪 測試方法：</strong>
+            <ol>
+                <li>選取下方測試內容</li>
+                <li>右鍵選擇「啟動簡報模式」</li>
+                <li>確認<span class="highlight">所有八個中文序號</span>都正確顯示為標題格式</li>
+                <li>特別注意「六、七、八、」等長標題的顯示效果</li>
+            </ol>
+        </div>
+
+        <h2>長標題測試內容</h2>
+
+        <div class="test-content">
+            <p>一、會議開場與背景說明 <span class="timestamp">[14:05]</span> 張執行長開場致詞，說明本次會議目的。
+            <span class="char-counter">約40字</span></p>
+
+            <p>二、2024年第四季產品表現回顧 <span class="timestamp">[14:15]</span> 產品部王總監報告各產品線表現。
+            <span class="char-counter">約50字</span></p>
+
+            <p>三、技術創新成果評估 <span class="timestamp">[14:45]</span> 技術部陳總監報告Q4技術創新項目進展。
+            <span class="char-counter">約55字</span></p>
+
+            <p>四、2025年市場趋势與競爭環境分析 <span class="timestamp">[15:20]</span> 行銷部林總監分析2025年市場趨勢：永續發展需求加速。
+            <span class="char-counter">約70字</span></p>
+
+            <p>五、第一季產品開發策略 <span class="timestamp">[15:55]</span> 經過各部門充分討論，決定第一季優先開發項目：AI智能客服2.0為最高優先級。
+            <span class="char-counter">約80字（臨界值）</span></p>
+
+            <p>六、資源配置與預算規劃 <span class="timestamp">[16:25]</span> 人事部黃總監報告Q1人力需求與配置計劃：技術部門新增AI工程師8名、資深前端開發者5名、DevOps工程師3名。
+            <span class="char-counter">約95字（超過限制）</span></p>
+
+            <p>七、風險評估與因應措施 <span class="timestamp">[16:50]</span> 風險管理小組提出Q1主要風險項目與因應策略：技術人才短缺風險、供應鏈成本波動、市場競爭加劇等三大風險項目，需要建立完整的應對機制。
+            <span class="char-counter">約110字（明顯超過）</span></p>
+
+            <p>八、行動計劃與執行時程 <span class="timestamp">[17:15]</span> 張執行長總結會議重點決議：批准2025年第一季產品開發計劃，總預算3.8億元；AI智能客服2.0為最高優先級項目，必須如期完成；立即啟動人才招募計劃，目標2月底前到位率達80%。
+            <span class="char-counter">約130字（最長測試）</span></p>
+        </div>
+
+        <div class="problem-highlight">
+            <h4>🔍 重點觀察</h4>
+            <ul>
+                <li>✅ <strong>一到五</strong>：短標題，應該正常顯示</li>
+                <li>🔥 <strong>六</strong>：95字，修復前會失效，修復後應該正常</li>
+                <li>🔥 <strong>七</strong>：110字，是關鍵測試點</li>
+                <li>🔥 <strong>八</strong>：130字，最長標題測試</li>
+            </ul>
+        </div>
+
+        <div class="solution-highlight">
+            <h4>✨ 預期修復效果</h4>
+            <p>修復後，無論標題多長，只要開頭是中文序號「一、二、三...」都應該：</p>
+            <ul>
+                <li>✅ 正確識別為標題</li>
+                <li>✅ 使用標題字體和樣式</li>
+                <li>✅ 保持格式一致性</li>
+                <li>✅ 不受長度限制影響</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

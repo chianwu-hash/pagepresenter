@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAI Markdown 處理修復</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .fix-section {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+        .error-section {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .success-section {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .code {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+            white-space: pre-line;
+        }
+        .test-content {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 OpenAI Markdown 處理修復</h1>
+
+    <div class="fix-section error-section">
+        <h2>❌ 原始問題</h2>
+        <p><strong>錯誤訊息：</strong></p>
+        <div class="code">
+            ✅ OpenAI處理完成，輸出長度: 1352
+            ⚠️ OpenAI API 處理失敗: this.parseMarkdownToHTML is not a function
+        </div>
+
+        <p><strong>問題分析：</strong></p>
+        <ul>
+            <li>OpenAI API 成功返回了 Markdown 格式的內容</li>
+            <li>但是 <code>parseMarkdownToHTML</code> 方法不存在</li>
+            <li>導致處理失敗，系統降級到 Gemini API</li>
+        </ul>
+    </div>
+
+    <div class="fix-section success-section">
+        <h2>✅ 修復方案</h2>
+        <p><strong>新增功能：</strong></p>
+        <ol>
+            <li>創建 <code>formatOpenAIResult(markdownContent)</code> 方法</li>
+            <li>實現簡單的 Markdown 轉 HTML 處理</li>
+            <li>添加 <code>processInlineMarkdown(text)</code> 處理行內格式</li>
+        </ol>
+
+        <p><strong>支援的 Markdown 格式：</strong></p>
+        <ul>
+            <li><code># ## ###</code> - 標題層級</li>
+            <li><code>- 項目</code> 或 <code>1. 項目</code> - 列表</li>
+            <li><code>**粗體**</code> - 粗體文字</li>
+            <li><code>*斜體*</code> - 斜體文字</li>
+            <li><code>`代碼`</code> - 行內代碼</li>
+        </ul>
+    </div>
+
+    <div class="fix-section">
+        <h2>🧪 測試內容範例</h2>
+        <p>當 OpenAI API 返回以下 Markdown 格式時：</p>
+        <div class="test-content">
+            <div class="code"># 會議主題：產品開發進度討論
+
+## 討論重點
+
+### 新功能開發進度
+- 目前完成度約 **70%**
+- 預計下週完成測試
+
+### 使用者介面優化
+- 設計稿已完成
+- 等待開發實作
+
+## 待辦事項
+1. 完成剩餘 30% 的功能開發
+2. 優化 API 回應時間
+3. 實作新的 UI 設計</div>
+        </div>
+
+        <p>現在會正確轉換為 HTML 結構並顯示在簡報模式中。</p>
+    </div>
+
+    <div class="fix-section">
+        <h2>🔍 測試步驟</h2>
+        <ol>
+            <li>重新載入擴充套件</li>
+            <li>在網頁中選取一些文字內容</li>
+            <li>右鍵點擊 → 選擇「啟動簡報模式」</li>
+            <li>觀察控制台日誌：
+                <ul>
+                    <li>應該看到 "🔄 嘗試使用 OpenAI API..."</li>
+                    <li>應該看到 "✅ OpenAI處理完成"</li>
+                    <li>應該看到 "格式化 OpenAI Markdown 結果"</li>
+                    <li>不應該再看到 "parseMarkdownToHTML is not a function"</li>
+                </ul>
+            </li>
+            <li>如果 OpenAI API 成功，內容應該正確顯示在簡報模式中</li>
+        </ol>
+    </div>
+
+    <div class="fix-section">
+        <h2>📈 預期改善</h2>
+        <ul>
+            <li>✅ OpenAI API 不再因為方法缺失而失敗</li>
+            <li>✅ 優先使用 OpenAI API（速度更快）</li>
+            <li>✅ 正確處理 Markdown 格式的內容</li>
+            <li>✅ 保持 Gemini API 作為備用方案</li>
+            <li>✅ 提升整體處理效率</li>
+        </ul>
+    </div>
+
+    <div class="fix-section">
+        <h2>🔧 技術細節</h2>
+        <p><strong>新增的方法：</strong></p>
+        <div class="code">formatOpenAIResult(markdownContent) {
+  // 創建容器元素
+  const container = document.createElement('div');
+  container.className = 'web-reader-content';
+
+  // 解析 Markdown 並轉換為 HTML
+  // 支援標題、列表、粗體、斜體、代碼等格式
+
+  return container;
+}</div>
+
+        <p><strong>行內格式處理：</strong></p>
+        <div class="code">processInlineMarkdown(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code>$1</code>');
+}</div>
+    </div>
+</body>
+</html>

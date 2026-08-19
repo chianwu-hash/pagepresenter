@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>列表模式測試</title>
+</head>
+<body>
+    <script>
+    // 測試列表識別正規表達式
+    const listPatterns = [
+        /^\d+[\.、]\s+/,                          // 1. 2、
+        /^\d+\)\s+/,                              // 1) 2)
+        /^\(\d+\)\s+/,                            // (1) (2)
+        /^\d+\.\d+[\.、]\s+/,                     // 1.1. 1.2、
+        /^\d+\.\d+\s+[^\s]/,                      // 2.1 核心產品線（無標點但有空格+內容）
+        /^\d+\.\d+\.\d+[\.、]\s+/,               // 1.1.1.
+    ];
+
+    const testCases = [
+        "2.1 核心產品線表現分析",
+        "2.1.1 智慧家居產品線",
+        "2.2 新興市場滲透率分析",
+        "1. 技術人才短缺風險",
+        "2) 供應鏈成本波動",
+        "3、市場競爭加劇",
+        "(1) 第一項",
+        "1.1. 子項目",
+        "1.2、另一個子項目"
+    ];
+
+    console.log("=== 列表模式測試結果 ===");
+    testCases.forEach((testCase, index) => {
+        console.log(`\n${index + 1}. 測試內容: "${testCase}"`);
+
+        let matched = false;
+        listPatterns.forEach((pattern, patternIndex) => {
+            const result = pattern.test(testCase);
+            if (result) {
+                console.log(`   ✅ 匹配模式 ${patternIndex}: ${pattern}`);
+                matched = true;
+            }
+        });
+
+        if (!matched) {
+            console.log(`   ❌ 未匹配任何模式`);
+        }
+
+        // 檢查字符細節
+        console.log(`   字符分析: "${testCase.substring(0, 10)}"...`);
+        for (let i = 0; i < Math.min(testCase.length, 10); i++) {
+            console.log(`     [${i}]: "${testCase[i]}" (Unicode: ${testCase.charCodeAt(i)})`);
+        }
+    });
+    </script>
+</body>
+</html>

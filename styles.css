@@ -1,0 +1,869 @@
+:root {
+  --reader-font-size: 32px;
+  --reader-line-height: 1.6;
+  --reader-max-width: 1400px;
+  --reader-bg-color: #ffffff;
+  --reader-text-color: #212529;
+  --reader-header-color: #000000;
+  --reader-link-color: #0066cc;
+  --reader-border-color: #dee2e6;
+  --reader-toolbar-bg: #f8f9fa;
+  --reader-sidebar-bg: #f1f3f4;
+}
+
+.web-reader-hidden {
+  display: none !important;
+}
+
+.web-reader-active {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: var(--reader-bg-color) !important;
+  z-index: 999999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif !important;
+  font-size: var(--reader-font-size) !important;
+  line-height: var(--reader-line-height) !important;
+  color: var(--reader-text-color) !important;
+  overflow: hidden !important;
+}
+
+body.reader-mode {
+  overflow: hidden !important;
+}
+
+/* 載入狀態樣式 */
+.reader-loading {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  height: 80vh !important;
+  text-align: center !important;
+  padding: 40px !important;
+}
+
+
+.loading-text {
+  font-size: 24px !important;
+  color: #495057 !important;
+  margin-bottom: 20px !important;
+  font-weight: 500 !important;
+}
+
+.loading-progress {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.progress-dots {
+  display: flex !important;
+  gap: 8px !important;
+}
+
+.progress-dots span {
+  width: 12px !important;
+  height: 12px !important;
+  background-color: #0066cc !important;
+  border-radius: 50% !important;
+  display: inline-block !important;
+  animation: pulse 1.4s ease-in-out infinite both !important;
+}
+
+.progress-dots span:nth-child(1) {
+  animation-delay: -0.32s !important;
+}
+
+.progress-dots span:nth-child(2) {
+  animation-delay: -0.16s !important;
+}
+
+@keyframes pulse {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* AI 處理狀態動畫 */
+@keyframes statusPulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(255, 195, 0, 0.3);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.02);
+    box-shadow: 0 4px 16px rgba(255, 195, 0, 0.6);
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes breathe {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+/* 載入中元素的樣式 */
+.loading-spinner {
+  display: inline-block !important;
+  animation: spin 1s linear infinite !important;
+  margin-right: 8px !important;
+  font-size: 16px !important;
+}
+
+.processing-animation {
+  animation: statusPulse 1.5s ease-in-out infinite alternate !important;
+}
+
+/* 狀態通知的進階樣式 */
+.status-processing {
+  animation: breathe 2s ease-in-out infinite !important;
+  border-left: 4px solid #ffc107 !important;
+}
+
+.status-complete {
+  animation: none !important;
+  border-left: 4px solid #28a745 !important;
+  transition: all 0.3s ease !important;
+}
+
+.status-error {
+  animation: none !important;
+  border-left: 4px solid #dc3545 !important;
+  transition: all 0.3s ease !important;
+}
+
+#web-reader-toolbar {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 6px 16px !important;
+  background: var(--reader-toolbar-bg) !important;
+  border-bottom: 1px solid var(--reader-border-color) !important;
+  min-height: 40px !important;
+  flex-shrink: 0 !important;
+  font-size: 14px !important;
+}
+
+.toolbar-left, .toolbar-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+#web-reader-toolbar button {
+  min-width: 32px !important;
+  min-height: 32px !important;
+  padding: 4px 8px !important;
+  border: 1px solid var(--reader-border-color) !important;
+  border-radius: 4px !important;
+  background: white !important;
+  color: var(--reader-text-color) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+#web-reader-toolbar button:hover {
+  background: #e9ecef !important;
+  transform: translateY(-1px) !important;
+}
+
+#web-reader-toolbar button:active {
+  transform: translateY(0) !important;
+}
+
+#reader-font-size {
+  font-size: 12px !important;
+  color: var(--reader-text-color) !important;
+  font-weight: 500 !important;
+  min-width: 50px !important;
+  text-align: center !important;
+}
+
+.divider {
+  color: var(--reader-border-color) !important;
+  font-size: 14px !important;
+  margin: 0 6px !important;
+}
+
+#reader-progress {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+#progress-text {
+  font-size: 12px !important;
+  color: var(--reader-text-color) !important;
+  font-weight: 500 !important;
+  min-width: 50px !important;
+  text-align: right !important;
+}
+
+#progress-bar {
+  width: 120px !important;
+  height: 6px !important;
+  background: #e9ecef !important;
+  border-radius: 3px !important;
+  overflow: hidden !important;
+}
+
+#progress-fill {
+  height: 100% !important;
+  background: var(--reader-link-color) !important;
+  border-radius: 4px !important;
+  transition: width 0.3s ease !important;
+  width: 0% !important;
+}
+
+/* 狀態顯示樣式 */
+#reader-status-display {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 12px !important;
+  color: var(--reader-text-color) !important;
+  margin-right: 12px !important;
+}
+
+#format-mode-status {
+  font-weight: bold !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+#mode-status {
+  font-weight: bold !important;
+  color: var(--reader-link-color) !important;
+}
+
+#highlight-status {
+  font-weight: 500 !important;
+}
+
+.web-reader-active {
+  display: flex !important;
+}
+
+.web-reader-active.high-contrast {
+  --reader-bg-color: #000000;
+  --reader-text-color: #ffffff;
+  --reader-header-color: #ffff99;
+  --reader-link-color: #66b3ff;
+  --reader-toolbar-bg: #1a1a1a;
+  --reader-sidebar-bg: #2d2d2d;
+  --reader-border-color: #555555;
+}
+
+/* 高對比模式下的按鈕樣式 */
+.web-reader-active.high-contrast #web-reader-toolbar button {
+  background: #333333 !important;
+  color: #ffffff !important;
+  border: 2px solid #666666 !important;
+}
+
+.web-reader-active.high-contrast #web-reader-toolbar button:hover {
+  background: #555555 !important;
+  border-color: #888888 !important;
+}
+
+.web-reader-active.high-contrast #web-reader-toolbar button:active,
+.web-reader-active.high-contrast #web-reader-toolbar button.active {
+  background: #ffff99 !important;
+  color: #000000 !important;
+  border-color: #cccc00 !important;
+}
+
+/* 高對比模式下的狀態顯示 */
+.web-reader-active.high-contrast #reader-status-display {
+  color: #ffff99 !important;
+}
+
+.web-reader-active.high-contrast #reader-font-size {
+  color: #ffffff !important;
+}
+
+.web-reader-active {
+  display: flex !important;
+}
+
+.web-reader-content-container {
+  display: flex !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+  transition: all 0.3s ease !important;
+}
+
+.web-reader-active.sidebar-collapsed #web-reader-sidebar {
+  width: 0 !important;
+  padding: 0 !important;
+  border-right: none !important;
+  overflow: hidden !important;
+}
+
+.web-reader-active.sidebar-collapsed #web-reader-content {
+  padding-left: 40px !important;
+}
+
+.web-reader-active.sidebar-collapsed #sidebar-toggle {
+  position: absolute !important;
+  left: 8px !important;
+  top: 8px !important;
+  z-index: 10 !important;
+  background: var(--reader-toolbar-bg) !important;
+  border: 1px solid var(--reader-border-color) !important;
+  border-radius: 4px !important;
+}
+
+#web-reader-sidebar {
+  width: 300px !important;
+  background: var(--reader-sidebar-bg) !important;
+  border-right: 2px solid var(--reader-border-color) !important;
+  overflow-y: auto !important;
+  flex-shrink: 0 !important;
+  padding: 20px !important;
+}
+
+#toc-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  font-size: 18px !important;
+  font-weight: bold !important;
+  color: var(--reader-header-color) !important;
+  margin-bottom: 16px !important;
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid var(--reader-border-color) !important;
+}
+
+#sidebar-toggle {
+  background: none !important;
+  border: 1px solid var(--reader-border-color) !important;
+  border-radius: 4px !important;
+  color: var(--reader-text-color) !important;
+  padding: 4px 8px !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  min-width: 32px !important;
+  height: 32px !important;
+}
+
+#sidebar-toggle:hover {
+  background: rgba(0, 102, 204, 0.1) !important;
+  border-color: var(--reader-link-color) !important;
+}
+
+.toc-item {
+  margin: 4px 0 !important;
+}
+
+.toc-item a {
+  display: block !important;
+  padding: 8px 12px !important;
+  text-decoration: none !important;
+  color: var(--reader-text-color) !important;
+  font-size: 14px !important;
+  border-radius: 4px !important;
+  transition: background-color 0.2s ease !important;
+}
+
+.toc-item a:hover {
+  background: rgba(0, 102, 204, 0.1) !important;
+  color: var(--reader-link-color) !important;
+}
+
+.toc-level-2 a { padding-left: 24px !important; }
+.toc-level-3 a { padding-left: 36px !important; }
+.toc-level-4 a { padding-left: 48px !important; }
+.toc-level-5 a { padding-left: 60px !important; }
+.toc-level-6 a { padding-left: 72px !important; }
+
+#web-reader-content {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 40px !important;
+  display: flex !important;
+  justify-content: center !important;
+}
+
+#reader-main-content {
+  width: 100% !important;
+  max-width: var(--reader-max-width) !important;
+  margin: 0 auto !important;
+}
+
+#reader-main-content * {
+  max-width: 100% !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  font-size: var(--reader-font-size) !important;
+  line-height: var(--reader-line-height) !important;
+  font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif !important;
+  color: var(--reader-text-color) !important;
+}
+
+.reader-header {
+  color: var(--reader-header-color) !important;
+  font-weight: bold !important;
+  margin: 32px 0 16px 0 !important;
+  line-height: 1.2 !important;
+  scroll-margin-top: 100px !important;
+}
+
+.reader-h1 {
+  font-size: calc(var(--reader-font-size) * 1.5) !important;
+  border-bottom: 3px solid var(--reader-border-color) !important;
+  padding-bottom: 8px !important;
+  font-weight: bold !important;
+  color: var(--reader-header-color) !important;
+}
+
+.reader-h2 {
+  font-size: calc(var(--reader-font-size) * 1.3) !important;
+  border-bottom: 2px solid var(--reader-border-color) !important;
+  padding-bottom: 6px !important;
+  font-weight: bold !important;
+  color: var(--reader-header-color) !important;
+}
+
+.reader-h3 {
+  font-size: calc(var(--reader-font-size) * 1.2) !important;
+  font-weight: bold !important;
+  color: var(--reader-header-color) !important;
+}
+
+.reader-h4, .reader-h5, .reader-h6 {
+  font-size: calc(var(--reader-font-size) * 1.1) !important;
+  font-weight: bold !important;
+  color: var(--reader-header-color) !important;
+}
+
+.reader-paragraph {
+  font-size: var(--reader-font-size) !important;
+  line-height: var(--reader-line-height) !important;
+  margin: 16px 0 !important;
+  text-align: justify !important;
+  color: var(--reader-text-color) !important;
+  font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif !important;
+  font-weight: normal !important;
+}
+
+#reader-main-content p {
+  font-size: var(--reader-font-size) !important;
+  line-height: var(--reader-line-height) !important;
+  margin: 16px 0 !important;
+  text-align: justify !important;
+  color: var(--reader-text-color) !important;
+  font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif !important;
+  font-weight: normal !important;
+}
+
+.reader-list {
+  margin: 16px 0 !important;
+  padding-left: 32px !important;
+}
+
+.reader-list-level-1 {
+  padding-left: 32px !important;
+}
+
+.reader-list-level-2 {
+  padding-left: 48px !important;
+}
+
+.reader-list-level-3 {
+  padding-left: 64px !important;
+}
+
+.reader-list ul {
+  margin: 8px 0 !important;
+  padding-left: 24px !important;
+}
+
+.reader-list-item {
+  font-size: var(--reader-font-size) !important;
+  line-height: var(--reader-line-height) !important;
+  margin: 8px 0 !important;
+  color: var(--reader-text-color) !important;
+  font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif !important;
+  font-weight: normal !important;
+}
+
+.reader-link {
+  color: var(--reader-link-color) !important;
+  text-decoration: underline !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+}
+
+.reader-link:hover {
+  opacity: 0.8 !important;
+  text-decoration-thickness: 2px !important;
+}
+
+#reader-main-content table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  margin: 24px 0 !important;
+  font-size: var(--reader-font-size) !important;
+}
+
+#reader-main-content th,
+#reader-main-content td {
+  padding: 12px !important;
+  border: 1px solid var(--reader-border-color) !important;
+  text-align: left !important;
+}
+
+#reader-main-content th {
+  background: var(--reader-toolbar-bg) !important;
+  font-weight: bold !important;
+}
+
+#reader-main-content img {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  margin: 24px auto !important;
+  border-radius: 8px !important;
+}
+
+#reader-main-content blockquote {
+  border-left: 4px solid var(--reader-link-color) !important;
+  padding-left: 24px !important;
+  margin: 24px 0 !important;
+  font-style: italic !important;
+  color: var(--reader-text-color) !important;
+  background: rgba(0, 102, 204, 0.05) !important;
+  padding: 16px 24px !important;
+  border-radius: 4px !important;
+}
+
+#reader-main-content pre {
+  background: var(--reader-toolbar-bg) !important;
+  padding: 16px !important;
+  border-radius: 6px !important;
+  overflow-x: auto !important;
+  font-family: "Consolas", "Monaco", monospace !important;
+  font-size: calc(var(--reader-font-size) * 0.85) !important;
+  border: 1px solid var(--reader-border-color) !important;
+}
+
+#reader-main-content code {
+  background: var(--reader-toolbar-bg) !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  font-family: "Consolas", "Monaco", monospace !important;
+  font-size: calc(var(--reader-font-size) * 0.9) !important;
+}
+
+
+@media (max-width: 1024px) {
+  #web-reader-sidebar {
+    width: 250px !important;
+  }
+
+  .web-reader-active {
+    --reader-max-width: 100% !important;
+  }
+
+  #web-reader-content {
+    padding: 20px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  #web-reader-sidebar {
+    display: none !important;
+  }
+
+  #web-reader-toolbar {
+    padding: 8px 16px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .toolbar-left, .toolbar-right {
+    gap: 8px !important;
+  }
+
+  #web-reader-toolbar button {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    font-size: 14px !important;
+  }
+
+  #progress-bar {
+    width: 120px !important;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 12px !important;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--reader-sidebar-bg) !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--reader-border-color) !important;
+  border-radius: 6px !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--reader-text-color) !important;
+}
+
+.reader-loading {
+  text-align: center !important;
+  padding: 60px 40px !important;
+  font-size: calc(var(--reader-font-size) * 1.2) !important;
+  color: var(--reader-link-color) !important;
+  font-weight: 500 !important;
+}
+
+
+.reader-error {
+  text-align: center !important;
+  padding: 60px 40px !important;
+  font-size: calc(var(--reader-font-size) * 1.1) !important;
+  color: #dc3545 !important;
+  font-weight: 500 !important;
+  background: rgba(220, 53, 69, 0.1) !important;
+  border: 1px solid rgba(220, 53, 69, 0.3) !important;
+  border-radius: 8px !important;
+  margin: 40px !important;
+}
+
+.reader-instruction {
+  text-align: center !important;
+  padding: 60px 40px !important;
+  font-size: calc(var(--reader-font-size) * 1.0) !important;
+  color: var(--reader-text-color) !important;
+  background: rgba(33, 150, 243, 0.05) !important;
+  border: 1px solid rgba(33, 150, 243, 0.2) !important;
+  border-radius: 8px !important;
+  margin: 40px !important;
+}
+
+.reader-instruction h2 {
+  color: var(--reader-header-color) !important;
+  margin-bottom: 24px !important;
+}
+
+.reader-instruction ol {
+  text-align: left !important;
+  display: inline-block !important;
+  font-size: calc(var(--reader-font-size) * 0.9) !important;
+  line-height: 1.8 !important;
+}
+
+.reader-instruction p {
+  font-size: calc(var(--reader-font-size) * 0.85) !important;
+  color: var(--reader-link-color) !important;
+  margin-top: 24px !important;
+}
+
+.toc-empty {
+  text-align: center !important;
+  padding: 20px !important;
+  color: var(--reader-text-color) !important;
+  opacity: 0.6 !important;
+  font-size: 14px !important;
+}
+
+.reader-paragraph-group {
+  margin: 24px 0 !important;
+  padding: 16px !important;
+  background: rgba(0, 102, 204, 0.02) !important;
+  border-left: 4px solid rgba(0, 102, 204, 0.2) !important;
+  border-radius: 0 4px 4px 0 !important;
+}
+
+.reader-paragraph-group p {
+  margin: 12px 0 !important;
+}
+
+.reader-paragraph-group p:first-child {
+  margin-top: 0 !important;
+}
+
+.reader-paragraph-group p:last-child {
+  margin-bottom: 0 !important;
+}
+
+.reader-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  margin: 24px 0 !important;
+  font-size: var(--reader-font-size) !important;
+  background: white !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+.reader-table-row {
+  border-bottom: 1px solid var(--reader-border-color) !important;
+}
+
+.reader-table-row:last-child {
+  border-bottom: none !important;
+}
+
+.reader-table-header {
+  background: var(--reader-toolbar-bg) !important;
+  font-weight: bold !important;
+  color: var(--reader-header-color) !important;
+  padding: 16px !important;
+  text-align: left !important;
+  border-right: 1px solid var(--reader-border-color) !important;
+}
+
+.reader-table-header:last-child {
+  border-right: none !important;
+}
+
+.reader-table-cell {
+  padding: 14px 16px !important;
+  border-right: 1px solid var(--reader-border-color) !important;
+  color: var(--reader-text-color) !important;
+  vertical-align: top !important;
+  line-height: var(--reader-line-height) !important;
+}
+
+.reader-table-cell:last-child {
+  border-right: none !important;
+}
+
+.reader-table-row:nth-child(even) .reader-table-cell {
+  background: rgba(248, 249, 250, 0.5) !important;
+}
+
+/* ============================================
+   AI畫重點模式樣式
+   ============================================ */
+
+/* 重點高亮樣式 */
+.reader-highlight {
+  background-color: #fff3cd !important; /* 淺黃色背景 */
+  padding: 2px 4px !important;
+  border-radius: 4px !important;
+  font-weight: bold !important;
+  color: #856404 !important; /* 深黃色文字 */
+  border: 1px solid #ffeaa7 !important; /* 黃色邊框 */
+  box-shadow: 0 1px 3px rgba(255, 235, 59, 0.3) !important; /* 輕微陰影 */
+  transition: all 0.2s ease !important; /* 平滑過渡效果 */
+}
+
+/* 高對比模式下的重點高亮 - 柔和的顏色 */
+.high-contrast .reader-highlight {
+  background-color: #37474f !important; /* 深藍灰色背景 */
+  color: #b0bec5 !important; /* 淺藍灰色文字 */
+  border: 1px solid #546e7a !important; /* 中藍灰色邊框 */
+  font-weight: bold !important; /* 粗體但不過度 */
+  box-shadow: 0 1px 2px rgba(176, 190, 197, 0.2) !important; /* 輕微陰影 */
+}
+
+/* 重點按鈕樣式 */
+#reader-highlight-mode {
+  position: relative !important;
+}
+
+#reader-highlight-mode.active {
+  background: linear-gradient(135deg, #fff3cd, #ffeb3b) !important;
+  color: #856404 !important;
+  border: 2px solid #fdd835 !important;
+  box-shadow: 0 2px 8px rgba(255, 235, 59, 0.4) !important;
+}
+
+#reader-highlight-mode.active::after {
+  content: "" !important;
+  position: absolute !important;
+  top: -2px !important;
+  right: -2px !important;
+  width: 8px !important;
+  height: 8px !important;
+  background: #4caf50 !important;
+  border-radius: 50% !important;
+  border: 1px solid white !important;
+}
+
+/* 版本切換按鈕樣式 */
+#reader-version-toggle.active {
+  background: linear-gradient(135deg, #e3f2fd, #bbdefb) !important;
+  color: #1565c0 !important;
+  border: 2px solid #42a5f5 !important;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3) !important;
+}
+
+/* 禁用按鈕樣式 */
+#reader-version-toggle:disabled,
+#reader-highlight-mode:disabled {
+  background: #f5f5f5 !important;
+  color: #999 !important;
+  border: 1px solid #ddd !important;
+  cursor: not-allowed !important;
+  opacity: 0.5 !important;
+  box-shadow: none !important;
+}
+
+#reader-version-toggle:disabled:hover,
+#reader-highlight-mode:disabled:hover {
+  background: #f5f5f5 !important;
+  transform: none !important;
+}
+
+/* 重點統計樣式（可選） */
+.reader-highlight-stats {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  background: rgba(255, 243, 205, 0.9) !important;
+  color: #856404 !important;
+  padding: 8px 16px !important;
+  border-radius: 20px !important;
+  font-size: 14px !important;
+  border: 1px solid #fdd835 !important;
+  backdrop-filter: blur(10px) !important;
+  z-index: 1000000 !important;
+}
+
+/* 動畫效果 */
+@keyframes highlight-pulse {
+  0% { box-shadow: 0 1px 3px rgba(255, 235, 59, 0.3); }
+  50% { box-shadow: 0 2px 8px rgba(255, 235, 59, 0.6); }
+  100% { box-shadow: 0 1px 3px rgba(255, 235, 59, 0.3); }
+}
+
+.reader-highlight:hover {
+  animation: highlight-pulse 1.5s ease-in-out infinite !important;
+  transform: translateY(-1px) !important;
+}

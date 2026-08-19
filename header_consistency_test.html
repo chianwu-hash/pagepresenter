@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 中文序號標題一致性測試</title>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 4px solid #e74c3c;
+            padding-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h2 {
+            color: #34495e;
+            border-left: 5px solid #f39c12;
+            padding-left: 20px;
+            margin-top: 35px;
+        }
+        .problem-highlight {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .solution-highlight {
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .test-content {
+            background-color: #f8f9fa;
+            padding: 25px;
+            border-left: 5px solid #007bff;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .before-after {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .before {
+            background-color: #fff5f5;
+            border: 2px solid #fed7d7;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .after {
+            background-color: #f0fff4;
+            border: 2px solid #c6f6d5;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .before h4 {
+            color: #e53e3e;
+            margin-top: 0;
+        }
+        .after h4 {
+            color: #38a169;
+            margin-top: 0;
+        }
+        .code-fix {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .instruction {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .highlight {
+            background-color: #ffeb3b;
+            padding: 2px 6px;
+            font-weight: bold;
+            border-radius: 3px;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 0 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎯 中文序號標題一致性測試</h1>
+
+        <div class="problem-highlight">
+            <h3>❌ 發現的問題</h3>
+            <p>中文序號「一、」、「二、」、「三、」明明是同一等級，但顯示效果不一致：</p>
+            <ul>
+                <li>「二、」和「三、」正確顯示為標題格式</li>
+                <li>「一、」卻顯示為普通段落格式</li>
+            </ul>
+            <p><strong>原因</strong>：排除規則 <code>/^.{50,}[。！？]$/</code> 誤判了長標題</p>
+        </div>
+
+        <div class="solution-highlight">
+            <h3>✅ 解決方案</h3>
+            <p>調整 <code>isHeader()</code> 函數邏輯順序：</p>
+            <ol>
+                <li><strong>優先檢查強標題特徵</strong>：中文序號「一、二、三、」等</li>
+                <li><strong>再執行排除規則</strong>：避免強標題被誤殺</li>
+                <li><strong>確保一致性</strong>：所有同等級序號都正確識別</li>
+            </ol>
+        </div>
+
+        <div class="before-after">
+            <div class="before">
+                <h4>❌ 修復前邏輯</h4>
+                <div class="code-fix">1. 長度篩選
+2. 執行排除規則 ← 問題在這裡
+3. 檢查標題特徵 ← 太晚了</div>
+                <p>結果：長的中文序號標題被排除規則攔截</p>
+            </div>
+            <div class="after">
+                <h4>✅ 修復後邏輯</h4>
+                <div class="code-fix">1. 長度篩選
+2. 優先檢查強標題特徵 ← 提前
+3. 執行排除規則
+4. 檢查其他標題特徵</div>
+                <p>結果：所有中文序號標題都正確識別</p>
+            </div>
+        </div>
+
+        <div class="instruction">
+            <strong>🧪 測試方法：</strong>
+            <ol>
+                <li>選取下方測試內容</li>
+                <li>右鍵選擇「啟動簡報模式」</li>
+                <li>觀察中文序號「一、」、「二、」、「三、」的顯示效果</li>
+                <li>確認它們都以<span class="highlight">相同的標題格式</span>顯示</li>
+            </ol>
+        </div>
+
+        <h2>標題一致性測試內容</h2>
+
+        <div class="test-content">
+            <p>一、會議開場與背景說明 <span class="timestamp">[14:05]</span> 張執行長開場致詞，說明本次會議目的是制定2025年第一季的產品策略方向，確保公司在快速變化的市場環境中保持競爭優勢。強調今年將是公司轉型的關鍵年，需要在數位化轉型、AI技術應用、以及客戶體驗優化三個面向上取得重大突破。</p>
+
+            <p>二、2024年第四季產品表現回顧 <span class="timestamp">[14:15]</span> 產品部王總監報告2024年第四季各產品線表現：智慧家居產品線營收達成率108%，超出目標8%；用戶滿意度4.2/5.0，較第三季提升0.3分。</p>
+
+            <p>三、技術創新成果評估 <span class="timestamp">[14:45]</span> 技術部陳總監報告Q4技術創新項目進展：智能客服系統準確率從78%提升至89%，平均回應時間從45秒縮短至12秒。</p>
+
+            <p>四、2025年市場趨勢與競爭環境分析 <span class="timestamp">[15:20]</span> 行銷部林總監分析2025年市場趨勢：永續發展需求加速，消費者對環保產品的需求增長45%；AI技術普及化，中小企業AI採用率預計從15%提升至40%。</p>
+
+            <p>五、第一季產品開發策略 <span class="timestamp">[15:55]</span> 經過各部門充分討論，決定第一季優先開發項目：AI智能客服2.0為最高優先級，預計開發時間10週，預算需求450萬元。</p>
+
+            <p>六、資源配置與預算規劃 <span class="timestamp">[16:25]</span> 人事部黃總監報告Q1人力需求與配置計劃：技術部門新增AI工程師8名、資深前端開發者5名、DevOps工程師3名。</p>
+
+            <p>七、風險評估與因應措施 <span class="timestamp">[16:50]</span> 風險管理小組提出Q1主要風險項目：技術人才短缺風險、供應鏈成本波動、市場競爭加劇等三大風險項目。</p>
+
+            <p>八、行動計劃與執行時程 <span class="timestamp">[17:15]</span> 張執行長總結會議重點決議：批准2025年第一季產品開發計劃，總預算3.8億元；AI智能客服2.0為最高優先級項目，必須如期完成。</p>
+        </div>
+
+        <div class="problem-highlight">
+            <h4>🔍 觀察重點</h4>
+            <p>修復後，所有中文序號標題應該：</p>
+            <ul>
+                <li>✅ <strong>格式一致</strong>：一、二、三、四、五、六、七、八都顯示為標題</li>
+                <li>✅ <strong>字體相同</strong>：都使用較大且加粗的標題字體</li>
+                <li>✅ <strong>間距一致</strong>：上下間距相同</li>
+                <li>✅ <strong>顏色相同</strong>：都使用標題顏色樣式</li>
+                <li>❌ <strong>避免混合</strong>：不應該部分是標題、部分是段落</li>
+            </ul>
+        </div>
+
+        <div class="solution-highlight">
+            <h4>💡 技術改進說明</h4>
+            <p>核心修改：在 <code>isHeader()</code> 函數中調整檢查順序</p>
+            <div class="code-fix">// 🔥 優先檢查強標題特徵，避免被排除規則誤殺
+const strongHeaderPatterns = [
+  /^[一二三四五六七八九十]+[、．]/,  // 一、二、
+  /^\d+[\.、]/,                      // 1. 2.
+  // ... 其他強標題模式
+];
+
+// 強標題直接返回 true，不受其他規則影響
+if (strongHeaderPatterns.some(pattern => pattern.test(trimmed))) {
+  return true;
+}
+
+// 再執行排除規則...</div>
+        </div>
+    </div>
+</body>
+</html>

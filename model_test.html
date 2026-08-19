@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini 模型選擇測試</title>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px solid #0066cc;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 15px;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .info {
+            color: #0c5460;
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Gemini 模型選擇功能測試</h1>
+
+    <div class="success">
+        <strong>✅ 功能已完成實作</strong><br>
+        現在你可以在擴充功能設定中選擇偏好的 Gemini 模型了！
+    </div>
+
+    <div class="test-section">
+        <h2>📋 測試步驟</h2>
+        <ol>
+            <li><strong>開啟擴充功能設定</strong>：點擊瀏覽器右上角的擴充功能圖示</li>
+            <li><strong>展開 API 設定</strong>：點擊「Google Gemini AI 排版增強 (免費)」旁的 ⚙️ 按鈕</li>
+            <li><strong>選擇模型</strong>：在「預設模型選擇」下拉選單中選擇你想要的模型：
+                <ul>
+                    <li><code>Gemini 1.5 Flash (推薦)</code> - 效能較佳，推薦使用</li>
+                    <li><code>Gemini 2.5 Flash</code> - 較新版本</li>
+                    <li><code>Gemini 1.5 Flash 8B (輕量)</code> - 輕量版本</li>
+                    <li><code>Gemini 1.0 Pro</code> - 舊版本</li>
+                </ul>
+            </li>
+            <li><strong>儲存設定</strong>：點擊「儲存」按鈕</li>
+            <li><strong>測試模型</strong>：點擊「測試」按鈕驗證選擇的模型是否正常運作</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h2>🎯 測試內容選取</h2>
+        <div class="highlight">
+            <h3>人工智慧發展報告</h3>
+            <p><strong>一、技術發展現況</strong></p>
+            <p>人工智慧技術在近年來快速發展，特別是在自然語言處理領域有重大突破。</p>
+
+            <p><strong>二、應用領域</strong></p>
+            <p>1. 教育科技：個人化學習系統</p>
+            <p>2. 醫療診斷：影像辨識與病理分析</p>
+            <p>3. 金融服務：風險評估與詐騙偵測</p>
+            <p>4. 智慧製造：品質控制與預測維護</p>
+
+            <p><strong>三、未來展望</strong></p>
+            <p>預計在未來五年內，人工智慧將更深度整合到各行各業，帶來產業轉型。</p>
+        </div>
+
+        <div class="info">
+            <strong>💡 測試方法：</strong><br>
+            1. 選取上面灰色區域的內容<br>
+            2. 右鍵選擇「啟動簡報模式」<br>
+            3. 觀察控制台輸出，確認使用的是你選擇的模型<br>
+            4. 比較不同模型的處理效果和速度
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>🔧 功能說明</h2>
+        <ul>
+            <li><strong>預設模型</strong>：gemini-1.5-flash（經實測效能較佳）</li>
+            <li><strong>自動降級</strong>：如果選擇的模型失敗，會自動嘗試其他模型</li>
+            <li><strong>設定儲存</strong>：模型選擇會自動儲存到本地，下次使用時會記住你的選擇</li>
+            <li><strong>測試功能</strong>：可以測試選擇的模型是否正常運作</li>
+            <li><strong>智能排序</strong>：系統會優先使用你選擇的模型，失敗時才使用備用模型</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>📊 模型比較</h2>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+                <tr style="background: #e9ecef;">
+                    <th style="border: 1px solid #dee2e6; padding: 8px;">模型</th>
+                    <th style="border: 1px solid #dee2e6; padding: 8px;">效能</th>
+                    <th style="border: 1px solid #dee2e6; padding: 8px;">速度</th>
+                    <th style="border: 1px solid #dee2e6; padding: 8px;">建議用途</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;"><strong>Gemini 1.5 Flash</strong></td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">⭐⭐⭐⭐⭐</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">快</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">推薦首選</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">Gemini 2.5 Flash</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">⭐⭐⭐⭐</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">中等</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">較新但不穩定</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">Gemini 1.5 Flash 8B</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">⭐⭐⭐</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">很快</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">輕量需求</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">Gemini 1.0 Pro</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">⭐⭐</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">慢</td>
+                    <td style="border: 1px solid #dee2e6; padding: 8px;">備用選項</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="success">
+        <strong>🎉 完成</strong><br>
+        模型選擇功能已成功整合！使用者現在可以根據自己的需求選擇最適合的 Gemini 模型。
+    </div>
+</body>
+</html>

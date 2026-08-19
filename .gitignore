@@ -1,0 +1,6 @@
+# Local AI tool permissions and machine-specific settings
+.claude/settings.local.json
+
+# Operating-system metadata
+Thumbs.db
+.DS_Store

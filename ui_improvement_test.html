@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI改善功能測試</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 40px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-content {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            background-color: #fafafa;
+        }
+        h1 { color: #2c3e50; }
+        h2 { color: #e74c3c; }
+        .improvement { color: #27ae60; font-weight: bold; }
+        .test-case { color: #2980b9; font-weight: bold; }
+        .note { background-color: #fff3cd; padding: 10px; border-left: 4px solid #ffc107; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎨 UI 改善功能測試</h1>
+
+        <h2>新增功能</h2>
+        <ul>
+            <li class="improvement">✅ 工具列顯示當前排版模式（AI 排版 / 離線排版）</li>
+            <li class="improvement">✅ 離線排版模式下自動禁用不適用的功能按鈕</li>
+            <li class="improvement">✅ 禁用按鈕提供清晰的提示訊息</li>
+            <li class="improvement">✅ 排版模式狀態以不同顏色區分</li>
+        </ul>
+
+        <h2>測試步驟</h2>
+
+        <div class="note">
+            <strong>📝 測試說明：</strong>您需要分別測試 AI 排版模式和離線排版模式，觀察工具列的變化
+        </div>
+
+        <h3 class="test-case">測試案例 1：AI 排版模式</h3>
+        <ol>
+            <li>確保擴充功能已設定 Gemini API 金鑰</li>
+            <li>選取下方的測試內容</li>
+            <li>右鍵啟動簡報模式</li>
+            <li>觀察工具列右上角的狀態顯示：
+                <ul>
+                    <li>應該顯示 <span style="background-color: #27ae60; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">AI 排版</span></li>
+                    <li>精簡版/原文版切換按鈕 📄 應該可以正常使用</li>
+                    <li>畫重點模式按鈕 ✨ 應該可以正常使用</li>
+                    <li>所有按鈕 hover 時有正常的互動效果</li>
+                </ul>
+            </li>
+        </ol>
+
+        <h3 class="test-case">測試案例 2：離線排版模式</h3>
+        <ol>
+            <li>暫時移除 Gemini API 金鑰（或使用無效金鑰）</li>
+            <li>選取下方的測試內容</li>
+            <li>右鍵啟動簡報模式</li>
+            <li>觀察工具列右上角的狀態顯示：
+                <ul>
+                    <li>應該顯示 <span style="background-color: #666; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">離線排版</span></li>
+                    <li>精簡版/原文版切換按鈕 📄 應該變灰並禁用</li>
+                    <li>畫重點模式按鈕 ✨ 應該變灰並禁用</li>
+                    <li>禁用按鈕 hover 時顯示提示訊息</li>
+                    <li>禁用按鈕點擊時不會有任何反應</li>
+                </ul>
+            </li>
+        </ol>
+
+        <div class="test-content">
+            <h2>🧪 測試內容</h2>
+            <p>請選取以下內容進行測試：</p>
+
+            <p><strong>【教學計劃】</strong>本學期將重點培養學生的閱讀理解能力與批判思考技巧。課程分為三個主要階段：</p>
+
+            <p><strong>第一階段：基礎訓練</strong>
+            - 文本分析技巧
+            - 關鍵資訊擷取
+            - 邏輯推理練習</p>
+
+            <p><strong>第二階段：進階應用</strong>
+            - 跨領域閱讀
+            - 批判性思考
+            - 論證分析</p>
+
+            <p><strong>第三階段：綜合評量</strong>
+            - 期末專題報告
+            - 口頭發表練習
+            - 同儕互評活動</p>
+
+            <p>本計劃預計在 114 學年度第一學期全面實施，透過多元化的教學方法，提升學生的語文素養與思辨能力。</p>
+        </div>
+
+        <h2>預期測試結果</h2>
+
+        <div style="background-color: #e8f5e8; padding: 15px; border-left: 4px solid #27ae60;">
+            <h3>✅ AI 排版模式</h3>
+            <ul>
+                <li>工具列顯示綠色的 "AI 排版" 標籤</li>
+                <li>所有功能按鈕都可正常使用</li>
+                <li>內容經過 AI 智能排版，有精簡版和原文版</li>
+                <li>可以使用畫重點功能</li>
+            </ul>
+        </div>
+
+        <div style="background-color: #fdf2f2; padding: 15px; border-left: 4px solid #666;">
+            <h3>⚫ 離線排版模式</h3>
+            <ul>
+                <li>工具列顯示灰色的 "離線排版" 標籤</li>
+                <li>版本切換按鈕被禁用並變灰</li>
+                <li>畫重點按鈕被禁用並變灰</li>
+                <li>禁用按鈕hover時顯示無法使用的提示</li>
+                <li>內容使用規則式排版，只有基礎格式化</li>
+            </ul>
+        </div>
+
+        <h2>UI 設計說明</h2>
+        <ul>
+            <li><strong>狀態標籤</strong>：使用不同背景顏色快速識別當前模式</li>
+            <li><strong>按鈕狀態</strong>：禁用時降低不透明度並顯示 not-allowed 鼠標樣式</li>
+            <li><strong>提示訊息</strong>：清楚說明為什麼某些功能在特定模式下不可用</li>
+            <li><strong>視覺一致性</strong>：與現有UI風格保持一致</li>
+        </ul>
+
+        <div class="note">
+            <strong>💡 使用提示：</strong>
+            <br>• 如果想測試離線排版模式，可以暫時在擴充功能設定中清空 API 金鑰
+            <br>• 測試完成後記得恢復正確的 API 金鑰設定
+            <br>• 注意觀察工具列狀態顯示的變化和按鈕的互動效果
+        </div>
+    </div>
+
+    <script>
+        console.log('🎨 UI 改善功能測試頁面已載入');
+        console.log('📋 主要測試項目：');
+        console.log('  1. 排版模式狀態顯示');
+        console.log('  2. 手動排版模式下的按鈕禁用效果');
+        console.log('  3. 禁用按鈕的提示訊息');
+        console.log('  4. 不同模式間的視覺區別');
+
+        // 文字選取提示
+        document.addEventListener('mouseup', () => {
+            const selection = window.getSelection().toString();
+            if (selection.length > 50) {
+                console.log('✅ 已選取測試內容，可以右鍵啟動簡報模式');
+                console.log('🎯 請特別注意觀察工具列右上角的狀態顯示變化');
+            }
+        });
+    </script>
+</body>
+</html>

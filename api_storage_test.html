@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API 儲存功能測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .warning {
+            color: #ffc107;
+            font-weight: bold;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        #testResults {
+            background: white;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-top: 10px;
+            white-space: pre-line;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 API 儲存功能測試</h1>
+
+    <div class="test-section">
+        <h2>測試項目</h2>
+        <p>此頁面將測試 OpenAI API 模型選擇的儲存和讀取功能：</p>
+        <ul>
+            <li>✅ 檢查儲存機制是否正確</li>
+            <li>✅ 檢查讀取機制是否正確</li>
+            <li>✅ 檢查預設值是否正確</li>
+            <li>✅ 檢查模型選擇是否同步</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>自動測試</h2>
+        <p>點擊按鈕執行各項測試：</p>
+        <button class="test-button" onclick="testStorageWrite()">測試寫入功能</button>
+        <button class="test-button" onclick="testStorageRead()">測試讀取功能</button>
+        <button class="test-button" onclick="testDefaultValues()">測試預設值</button>
+        <button class="test-button" onclick="testAllModels()">測試所有模型</button>
+        <button class="test-button" onclick="clearStorage()">清除測試資料</button>
+
+        <div id="testResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>手動測試步驟</h2>
+        <ol>
+            <li>點擊瀏覽器右上角的擴充套件圖示</li>
+            <li>展開「OpenAI API 模型選擇」設定</li>
+            <li>嘗試選擇不同的模型選項</li>
+            <li>點擊「僅儲存模型選擇」按鈕</li>
+            <li>重新開啟擴充套件彈窗，確認模型選擇是否保持</li>
+            <li>在狀態區域檢查是否顯示正確的 API 設定資訊</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h2>預期結果</h2>
+        <ul>
+            <li><span class="success">✅ 模型選擇能正確儲存</span></li>
+            <li><span class="success">✅ 重新開啟後模型選擇保持不變</span></li>
+            <li><span class="success">✅ 狀態顯示包含 API 設定資訊</span></li>
+            <li><span class="success">✅ 預設模型為 gpt-4o-mini</span></li>
+        </ul>
+    </div>
+
+    <script>
+        let testOutput = document.getElementById('testResults');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+            testOutput.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            testOutput.scrollTop = testOutput.scrollHeight;
+        }
+
+        function testStorageWrite() {
+            log('開始測試儲存功能...', 'info');
+
+            const testModel = 'gpt-4o';
+            const testApiKey = 'sk-test123456789';
+
+            chrome.storage.local.set({
+                openaiModel: testModel,
+                openaiAPIKey: testApiKey
+            }, () => {
+                if (chrome.runtime.lastError) {
+                    log(`儲存失敗: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    log(`成功儲存模型: ${testModel}`, 'success');
+                    log(`成功儲存API金鑰: ${testApiKey}`, 'success');
+                }
+            });
+        }
+
+        function testStorageRead() {
+            log('開始測試讀取功能...', 'info');
+
+            chrome.storage.local.get(['openaiModel', 'openaiAPIKey'], (result) => {
+                if (chrome.runtime.lastError) {
+                    log(`讀取失敗: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    const model = result.openaiModel || 'gpt-4o-mini';
+                    const apiKey = result.openaiAPIKey || '';
+
+                    log(`讀取到的模型: ${model}`, 'success');
+                    log(`讀取到的API金鑰存在: ${apiKey ? '是' : '否'}`, 'success');
+
+                    if (apiKey) {
+                        log(`API金鑰前綴: ${apiKey.substring(0, 7)}...`, 'info');
+                    }
+                }
+            });
+        }
+
+        function testDefaultValues() {
+            log('測試預設值...', 'info');
+
+            // 先清除儲存
+            chrome.storage.local.remove(['openaiModel', 'openaiAPIKey'], () => {
+                if (chrome.runtime.lastError) {
+                    log(`清除失敗: ${chrome.runtime.lastError.message}`, 'error');
+                    return;
+                }
+
+                // 然後讀取預設值
+                chrome.storage.local.get(['openaiModel', 'openaiAPIKey'], (result) => {
+                    const model = result.openaiModel || 'gpt-4o-mini';
+                    const apiKey = result.openaiAPIKey || '';
+
+                    if (model === 'gpt-4o-mini') {
+                        log('✅ 預設模型正確 (gpt-4o-mini)', 'success');
+                    } else {
+                        log(`❌ 預設模型不正確，應為 gpt-4o-mini，實際為 ${model}`, 'error');
+                    }
+
+                    if (apiKey === '') {
+                        log('✅ 預設API金鑰為空', 'success');
+                    } else {
+                        log(`⚠️ 預設API金鑰應為空，實際為 ${apiKey}`, 'warning');
+                    }
+                });
+            });
+        }
+
+        function testAllModels() {
+            log('測試所有模型選項...', 'info');
+
+            const models = ['gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-3.5-turbo'];
+            let testIndex = 0;
+
+            function testNextModel() {
+                if (testIndex >= models.length) {
+                    log('所有模型測試完成', 'success');
+                    return;
+                }
+
+                const model = models[testIndex];
+                log(`測試模型: ${model}`, 'info');
+
+                chrome.storage.local.set({ openaiModel: model }, () => {
+                    if (chrome.runtime.lastError) {
+                        log(`儲存模型 ${model} 失敗: ${chrome.runtime.lastError.message}`, 'error');
+                    } else {
+                        // 立即讀取驗證
+                        chrome.storage.local.get(['openaiModel'], (result) => {
+                            const readModel = result.openaiModel;
+                            if (readModel === model) {
+                                log(`✅ 模型 ${model} 儲存和讀取成功`, 'success');
+                            } else {
+                                log(`❌ 模型 ${model} 測試失敗，讀取到 ${readModel}`, 'error');
+                            }
+
+                            testIndex++;
+                            setTimeout(testNextModel, 500);
+                        });
+                    }
+                });
+            }
+
+            testNextModel();
+        }
+
+        function clearStorage() {
+            log('清除測試資料...', 'warning');
+
+            chrome.storage.local.remove(['openaiModel', 'openaiAPIKey'], () => {
+                if (chrome.runtime.lastError) {
+                    log(`清除失敗: ${chrome.runtime.lastError.message}`, 'error');
+                } else {
+                    log('測試資料已清除', 'success');
+                }
+            });
+        }
+
+        // 頁面載入時的初始測試
+        document.addEventListener('DOMContentLoaded', () => {
+            log('API 儲存功能測試開始...', 'info');
+            log('請使用上方按鈕進行各項測試', 'info');
+        });
+    </script>
+</body>
+</html>

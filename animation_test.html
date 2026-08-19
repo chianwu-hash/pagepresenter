@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 動態狀態顯示測試 - 網頁簡報器</title>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 4px solid #3498db;
+            padding-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h2 {
+            color: #34495e;
+            border-left: 5px solid #e74c3c;
+            padding-left: 20px;
+            margin-top: 35px;
+        }
+        .feature-highlight {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .improvement-list {
+            background-color: #e8f5e8;
+            border: 1px solid #c3e6cb;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        .improvement-list h4 {
+            color: #155724;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .test-content {
+            background-color: #f8f9fa;
+            padding: 25px;
+            border-left: 5px solid #007bff;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .instruction {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            border: 2px solid #ff6b6b;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 4px 8px rgba(255, 107, 107, 0.2);
+        }
+        .instruction strong {
+            color: #d63031;
+            font-size: 18px;
+        }
+        .observation-points {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .observation-points h4 {
+            color: #856404;
+            margin-top: 0;
+        }
+        .status-demo {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            margin: 10px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .demo-processing {
+            animation: statusPulse 1.5s ease-in-out infinite alternate;
+            border-left: 4px solid #ffc107;
+        }
+        .demo-complete {
+            border-left: 4px solid #28a745;
+        }
+        .demo-error {
+            border-left: 4px solid #dc3545;
+        }
+        .loading-spinner-demo {
+            display: inline-block;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        @keyframes statusPulse {
+            0% {
+                opacity: 0.7;
+                transform: scale(0.98);
+                box-shadow: 0 2px 8px rgba(255, 195, 0, 0.3);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1.02);
+                box-shadow: 0 4px 16px rgba(255, 195, 0, 0.6);
+            }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .warning-box {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .success-box {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        ul, ol { margin: 15px 0; padding-left: 25px; }
+        li { margin-bottom: 8px; }
+        .highlight {
+            background-color: #ffeb3b;
+            padding: 2px 6px;
+            font-weight: bold;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎬 動態狀態顯示功能測試</h1>
+
+        <div class="feature-highlight">
+            <h3>🚀 新功能亮點</h3>
+            <p>解決了用戶反饋的關鍵問題：<strong>AI 處理時狀態提示只出現一下下就消失，用戶不知道系統在做什麼</strong></p>
+        </div>
+
+        <div class="improvement-list">
+            <h4>✅ 重要改進項目</h4>
+            <ul>
+                <li><strong>持續狀態顯示</strong>：處理中的通知不會自動消失，直到處理完成</li>
+                <li><strong>動畫視覺反饋</strong>：旋轉 Loading 圖示 + 脈動效果，清楚表示系統正在工作</li>
+                <li><strong>工具列同步顯示</strong>：狀態欄也會顯示脈動動畫</li>
+                <li><strong>智能通知管理</strong>：只有完成或錯誤狀態才會自動消失</li>
+                <li><strong>視覺層次分明</strong>：不同狀態用不同顏色和動畫區分</li>
+            </ul>
+        </div>
+
+        <h2>🎭 動畫效果預覽</h2>
+
+        <div class="status-demo demo-processing">
+            <span class="loading-spinner-demo">⏳</span>
+            <span><strong>AI 精簡版生成中...</strong> - 這個通知會持續顯示直到處理完成</span>
+        </div>
+
+        <div class="status-demo demo-complete">
+            <span>✅ <strong>AI 處理完成</strong> - 完成通知會在5秒後自動消失</span>
+        </div>
+
+        <div class="status-demo demo-error">
+            <span>❌ <strong>AI 處理失敗</strong> - 錯誤通知會在5秒後自動消失</span>
+        </div>
+
+        <div class="instruction">
+            <strong>🧪 測試步驟：</strong>
+            <ol>
+                <li><strong>選取下方測試內容</strong>（任何一段皆可）</li>
+                <li><strong>右鍵選擇「啟動簡報模式」</strong></li>
+                <li><strong>觀察動態變化</strong>：
+                    <ul>
+                        <li>🟡 <span class="highlight">處理中</span>：黃色通知 + 旋轉⏳ + 脈動動畫，<strong>持續顯示不消失</strong></li>
+                        <li>🟢 <span class="highlight">完成</span>：綠色通知 + ✅ 圖示，2-3秒後才消失</li>
+                        <li>🔴 <span class="highlight">錯誤</span>：紅色通知 + ❌ 圖示，5秒後消失</li>
+                    </ul>
+                </li>
+                <li><strong>檢查工具列</strong>：右側狀態欄也會同步顯示脈動效果</li>
+                <li><strong>測試長時間處理</strong>：觀察通知是否持續顯示</li>
+            </ol>
+        </div>
+
+        <div class="observation-points">
+            <h4>🔍 重點觀察項目</h4>
+            <ul>
+                <li><strong>持續性</strong>：處理中通知不會在3秒後消失</li>
+                <li><strong>動畫效果</strong>：旋轉Loading + 脈動效果</li>
+                <li><strong>狀態同步</strong>：右上角通知 + 工具列狀態 雙重顯示</li>
+                <li><strong>階段性提示</strong>：精簡版處理 → 原文版處理 → 最終完成</li>
+                <li><strong>智能清理</strong>：完成後自動清理處理中通知</li>
+            </ul>
+        </div>
+
+        <h2>📝 測試內容區域</h2>
+
+        <div class="test-content">
+            <h3>雲端原生架構設計原則</h3>
+            <p>在現代軟體開發中，雲端原生架構已成為企業數位轉型的核心策略。這種架構方式不僅能提升系統的可擴展性和可靠性，更能大幅降低維運成本。</p>
+
+            <h4>核心設計原則</h4>
+            <ol>
+                <li><strong>微服務架構</strong>：將大型應用程式拆分為獨立、可部署的小型服務</li>
+                <li><strong>容器化部署</strong>：使用 Docker 等容器技術確保環境一致性</li>
+                <li><strong>DevOps 整合</strong>：實現持續整合和持續部署的自動化流程</li>
+                <li><strong>監控與可觀測性</strong>：建立完整的系統監控和日誌管理機制</li>
+            </ol>
+
+            <h4>實施策略</h4>
+            <ul>
+                <li>採用 Kubernetes 作為容器編排平台</li>
+                <li>實作服務網格（Service Mesh）管理服務間通訊</li>
+                <li>建立 API Gateway 統一管理外部存取</li>
+                <li>導入 Infrastructure as Code（IaC）自動化基礎設施管理</li>
+                <li>實施混合雲策略，平衡成本與效能</li>
+            </ul>
+
+            <p>透過這些原則的實施，企業可以建立更加彈性、可靠且易於維護的系統架構，從而在競爭激烈的數位市場中保持優勢。</p>
+        </div>
+
+        <div class="test-content">
+            <h3>人工智慧在企業決策中的應用</h3>
+            <p>隨著機器學習和深度學習技術的快速發展，人工智慧正逐漸成為企業決策過程中不可或缺的工具。從數據分析到預測建模，AI 技術正在改變企業的營運方式。</p>
+
+            <h4>主要應用領域</h4>
+            <ol>
+                <li><strong>預測性分析</strong>
+                    <ul>
+                        <li>市場趨勢預測：分析歷史數據預測未來市場走向</li>
+                        <li>需求預測：優化庫存管理和供應鏈規劃</li>
+                        <li>客戶行為分析：提升客戶滿意度和留存率</li>
+                    </ul>
+                </li>
+                <li><strong>風險管理</strong>
+                    <ul>
+                        <li>信用風險評估：提升放貸決策的準確性</li>
+                        <li>欺詐檢測：即時識別異常交易和可疑行為</li>
+                        <li>營運風險監控：預防潛在的營運中斷</li>
+                    </ul>
+                </li>
+                <li><strong>個人化服務</strong>
+                    <ul>
+                        <li>推薦系統：提供個人化的產品和服務推薦</li>
+                        <li>動態定價：根據市場狀況調整產品價格</li>
+                        <li>客戶服務：透過聊天機器人提供24/7客戶支援</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <p>企業在導入 AI 技術時，需要考慮數據品質、技術整合、人才培育等多個面向，才能真正發揮 AI 的潛力並創造商業價值。</p>
+        </div>
+
+        <div class="warning-box">
+            <strong>⚠️ 測試注意事項：</strong>
+            <ul>
+                <li>確保已設定 AI API 金鑰（Gemini 或 OpenAI）以測試完整功能</li>
+                <li>如果沒有 API 金鑰，系統會使用規則式處理，但動畫效果仍可觀察</li>
+                <li>處理時間可能需要30-60秒，請耐心觀察狀態變化</li>
+            </ul>
+        </div>
+
+        <div class="success-box">
+            <strong>✅ 期望測試結果：</strong>
+            <ul>
+                <li>處理中狀態會持續顯示，不會短暫消失</li>
+                <li>用戶能清楚看到每個處理階段的進度</li>
+                <li>動畫效果流暢，視覺反饋明確</li>
+                <li>完成後通知管理得當，不會產生混亂</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

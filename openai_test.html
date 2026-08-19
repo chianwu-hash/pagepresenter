@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAI API 整合測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-content {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .highlight {
+            background: yellow;
+            padding: 2px 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>OpenAI API 整合測試頁面</h1>
+
+    <h2>測試步驟</h2>
+    <ol>
+        <li>安裝或重新載入擴充套件</li>
+        <li>點擊擴充套件圖示，配置 OpenAI API 金鑰</li>
+        <li>選取下方的測試內容</li>
+        <li>右鍵點擊選取文字，選擇「啟動簡報模式」</li>
+        <li>觀察是否優先使用 OpenAI API 處理</li>
+    </ol>
+
+    <div class="test-content">
+        <h2>測試內容 - 會議記錄範例</h2>
+
+        <h3>會議主題：產品開發進度討論</h3>
+        <p><strong>時間：</strong>2024年1月22日 14:00-15:30</p>
+        <p><strong>參與人員：</strong>產品經理張小明、開發工程師李小華、UI設計師王小美</p>
+
+        <h4>討論重點</h4>
+        <ul>
+            <li><span class="highlight">新功能開發進度</span>：目前完成度約 70%，預計下週完成測試</li>
+            <li><span class="highlight">使用者介面優化</span>：設計稿已完成，等待開發實作</li>
+            <li><span class="highlight">API 整合問題</span>：第三方服務回應時間過長，需要優化處理機制</li>
+            <li><span class="highlight">測試計劃</span>：本週五開始進行內部測試，下週一開放 Beta 測試</li>
+        </ul>
+
+        <h4>待辦事項</h4>
+        <ol>
+            <li>完成剩餘 30% 的功能開發（負責人：李小華，期限：1/29）</li>
+            <li>優化 API 回應時間（負責人：李小華，期限：1/26）</li>
+            <li>實作新的 UI 設計（負責人：王小美，期限：1/28）</li>
+            <li>準備測試環境和測試案例（負責人：張小明，期限：1/25）</li>
+            <li>撰寫使用者說明文件（負責人：張小明，期限：1/30）</li>
+        </ol>
+
+        <h4>風險評估</h4>
+        <p>主要風險在於第三方 API 的穩定性，如果無法及時解決，可能會影響正式發布時程。建議準備備用方案，或考慮更換服務提供商。</p>
+
+        <h4>下次會議</h4>
+        <p>時間：1/29 (週一) 10:00，地點：會議室B，議題：Beta測試結果檢討與正式發布準備。</p>
+    </div>
+
+    <div class="test-content">
+        <h2>測試內容 - 技術文件範例</h2>
+
+        <h3>OpenAI API 整合說明</h3>
+
+        <h4>功能概述</h4>
+        <p>本擴充套件現在支援多個 AI 服務提供商，包括 OpenAI 和 Google Gemini API。系統會按照優先級順序嘗試不同的 API 服務：</p>
+
+        <ol>
+            <li><strong>OpenAI API</strong> - 優先使用，支援 GPT-4o Mini、GPT-4o、GPT-4、GPT-3.5 Turbo</li>
+            <li><strong>Google Gemini API</strong> - 備用選項，免費使用</li>
+            <li><strong>規則式處理</strong> - 最終備用方案，完全離線</li>
+        </ol>
+
+        <h4>API 配置</h4>
+        <p>在擴充套件彈出視窗中，使用者可以分別配置：</p>
+        <ul>
+            <li>OpenAI API 金鑰（格式：sk-開頭）</li>
+            <li>模型選擇（推薦：GPT-4o Mini）</li>
+            <li>Gemini API 金鑰（備用方案）</li>
+        </ul>
+
+        <h4>成本效益分析</h4>
+        <p>OpenAI GPT-4o Mini 具有以下優勢：</p>
+        <ul>
+            <li>每月 $5 免費額度（約150萬 tokens）</li>
+            <li>處理速度比 Gemini 快約 2-3 倍</li>
+            <li>中文處理品質優秀</li>
+            <li>API 穩定性高</li>
+        </ul>
+    </div>
+</body>
+</html>
