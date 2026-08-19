@@ -730,6 +730,24 @@ body.reader-mode {
   overflow: hidden !important;
 }
 
+.reader-table-wrapper {
+  width: 100% !important;
+  overflow-x: auto !important;
+  margin: 24px 0 !important;
+}
+
+.reader-table-wrapper .reader-table {
+  margin: 0 !important;
+  min-width: 640px !important;
+}
+
+.reader-table caption {
+  text-align: left !important;
+  color: var(--reader-header-color) !important;
+  font-weight: bold !important;
+  padding: 0 0 12px !important;
+}
+
 .reader-table-row {
   border-bottom: 1px solid var(--reader-border-color) !important;
 }
@@ -767,6 +785,50 @@ body.reader-mode {
   background: rgba(248, 249, 250, 0.5) !important;
 }
 
+.reader-table-section {
+  background: var(--reader-toolbar-bg) !important;
+  color: var(--reader-header-color) !important;
+  text-align: left !important;
+  padding: 16px !important;
+  border-bottom: 2px solid var(--reader-border-color) !important;
+  scroll-margin-top: 24px !important;
+}
+
+.reader-quote {
+  margin: 20px 0 !important;
+  padding: 12px 20px !important;
+  border-left: 5px solid var(--reader-link-color) !important;
+  background: rgba(0, 102, 204, 0.04) !important;
+}
+
+.reader-media {
+  margin: 24px 0 !important;
+  text-align: center !important;
+}
+
+.reader-image,
+.reader-media video {
+  display: block !important;
+  width: auto !important;
+  max-height: 70vh !important;
+  margin: 0 auto 10px !important;
+  object-fit: contain !important;
+}
+
+.reader-media audio {
+  width: 100% !important;
+}
+
+.reader-media figcaption {
+  color: var(--reader-text-color) !important;
+  opacity: 0.8 !important;
+}
+
+.reader-embedded-link {
+  display: inline-block !important;
+  padding: 10px 14px !important;
+}
+
 /* ============================================
    AI畫重點模式樣式
    ============================================ */
@@ -795,6 +857,108 @@ body.reader-mode {
 /* 重點按鈕樣式 */
 #reader-highlight-mode {
   position: relative !important;
+}
+
+.reader-control-hidden {
+  display: none !important;
+}
+
+#reader-ai-process {
+  white-space: nowrap !important;
+}
+
+#reader-ai-process:not(:disabled) {
+  background: #eef7ff !important;
+  border-color: #66aee8 !important;
+  color: #075985 !important;
+}
+
+#ai-consent-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  z-index: 1000000 !important;
+}
+
+#ai-consent-dialog {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: min(460px, calc(100vw - 40px)) !important;
+  box-sizing: border-box !important;
+  padding: 28px !important;
+  border: 2px solid var(--reader-link-color) !important;
+  border-radius: 12px !important;
+  background: var(--reader-bg-color) !important;
+  color: var(--reader-text-color) !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.32) !important;
+  text-align: center !important;
+  z-index: 1000001 !important;
+  font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif !important;
+}
+
+#ai-consent-dialog .ai-consent-icon {
+  width: 44px !important;
+  height: 44px !important;
+  margin: 0 auto 12px !important;
+  border-radius: 50% !important;
+  background: #dff4e5 !important;
+  color: #176b35 !important;
+  font-size: 28px !important;
+  line-height: 44px !important;
+  font-weight: bold !important;
+}
+
+#ai-consent-dialog h3 {
+  margin: 0 0 12px !important;
+  color: var(--reader-header-color) !important;
+  font-size: 22px !important;
+}
+
+#ai-consent-dialog p {
+  margin: 8px 0 !important;
+  font-size: 17px !important;
+  line-height: 1.5 !important;
+}
+
+#ai-consent-dialog .ai-consent-note {
+  color: var(--reader-text-color) !important;
+  opacity: 0.75 !important;
+  font-size: 14px !important;
+}
+
+#ai-consent-dialog .ai-consent-actions {
+  display: flex !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  margin-top: 22px !important;
+}
+
+#ai-consent-dialog button {
+  min-height: 44px !important;
+  padding: 10px 18px !important;
+  border: 1px solid var(--reader-border-color) !important;
+  border-radius: 7px !important;
+  cursor: pointer !important;
+  font-size: 15px !important;
+  font-weight: bold !important;
+}
+
+#ai-consent-continue {
+  background: var(--reader-link-color) !important;
+  color: white !important;
+}
+
+#ai-consent-stay {
+  background: var(--reader-toolbar-bg) !important;
+  color: var(--reader-text-color) !important;
+}
+
+@media (max-width: 520px) {
+  #ai-consent-dialog .ai-consent-actions {
+    flex-direction: column !important;
+  }
 }
 
 #reader-highlight-mode.active {

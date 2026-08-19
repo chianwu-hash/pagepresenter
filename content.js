@@ -10,9 +10,12 @@ class WebReader {
     this.tableOfContents = [];
     this.selectedContent = null;
     this.originalSelectedText = null; // 保存原始選取文字
+    this.originalSelectedFragment = null; // 保存選取範圍的本機 DOM（不送往 AI）
+    this.lastSelectionSnapshot = null; // 右鍵選單開啟前保留選取狀態
     this.simplifiedContent = null; // AI精簡版本快取
     this.originalFormattedContent = null; // 原文排版版本快取
     this.offlineFormattedContent = null; // 離線排版版本快取
+    this.offlineHighlightedContent = null; // 離線規則式重點版本快取
     this.isSimplifiedVersion = true; // 當前版本狀態：true=精簡版, false=原文版
     this.isOfflineMode = false; // 是否為離線模式
     this.isHighlightMode = false; // 畫重點模式狀態
@@ -20,6 +23,8 @@ class WebReader {
     this.simplifiedHighlighted = null; // 精簡版重點標記內容
     this.originalHighlighted = null; // 原文版重點標記內容
     this.currentFormatMode = 'AI'; // 當前排版模式：'AI' 或 'Manual'
+    this.isAIProcessing = false;
+    this.aiProcessingStarted = false;
     this.init();
   }
 
@@ -48,6 +53,7 @@ class WebReader {
           <span class="divider">|</span>
           <button id="reader-version-toggle" title="切換版本 (精簡版/原文版)">📄</button>
           <button id="reader-highlight-mode" title="AI畫重點模式">✨</button>
+          <button id="reader-ai-process" title="送給 AI 處理">🤖 AI處理</button>
         </div>
         <div class="toolbar-right">
           <div id="reader-status-display">
@@ -96,6 +102,7 @@ class WebReader {
       if (e.target.disabled) return;
       this.toggleHighlightMode();
     };
+    document.getElementById('reader-ai-process').onclick = () => this.startAIProcessing();
     document.getElementById('sidebar-toggle').onclick = () => this.toggleSidebar();
 
     document.addEventListener('keydown', (e) => {
@@ -104,20 +111,71 @@ class WebReader {
       }
     });
 
-    // 滾動事件監聽器
-    window.addEventListener('scroll', () => {
+    // 在右鍵選單接手前保存選取範圍；DOM 只留在目前分頁記憶體。
+    document.addEventListener('selectionchange', () => {
+      if (!this.isActive) {
+        this.captureSelectionSnapshot();
+      }
+    });
+
+    // 簡報內容使用自己的捲動容器，進度也必須監聽同一個元素。
+    document.getElementById('web-reader-content').addEventListener('scroll', () => {
       if (this.isActive) {
+        this.currentSection = this.getCurrentSection();
         this.updateProgress();
       }
     });
   }
 
+  captureSelectionSnapshot() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+
+    const text = selection.toString().trim();
+    if (!text) return null;
+
+    const fragment = selection.getRangeAt(0).cloneContents();
+    this.lastSelectionSnapshot = { text, fragment };
+    return this.lastSelectionSnapshot;
+  }
+
+  getSelectionFragment(selectedText) {
+    const current = this.captureSelectionSnapshot();
+    const snapshot = current || this.lastSelectionSnapshot;
+    if (!snapshot || !snapshot.fragment) return null;
+
+    const normalize = value => (value || '').replace(/\s+/g, ' ').trim();
+    const expected = normalize(selectedText);
+    const actual = normalize(snapshot.text);
+
+    // 避免誤用上一段陳舊選取；容許瀏覽器對儲存格空白做些微正規化。
+    if (expected && actual &&
+        expected !== actual &&
+        !expected.includes(actual) &&
+        !actual.includes(expected)) {
+      return null;
+    }
+
+    return snapshot.fragment.cloneNode(true);
+  }
+
   // 處理選取內容並啟動簡報模式
-  async startWithSelectedContent(selectedText) {
+  async startWithSelectedContent(selectedText, selectedFragment = null) {
     console.log('使用選取內容啟動簡報模式');
 
     // 保存原始選取文字
     this.originalSelectedText = selectedText;
+    this.originalSelectedFragment = selectedFragment
+      ? selectedFragment.cloneNode(true)
+      : this.getSelectionFragment(selectedText);
+    this.offlineHighlightedContent = null;
+    this.simplifiedContent = null;
+    this.originalFormattedContent = null;
+    this.simplifiedHighlighted = null;
+    this.originalHighlighted = null;
+    this.highlightData = null;
+    this.isAIProcessing = false;
+    this.aiProcessingStarted = false;
 
     // 新的分階段處理流程
     await this.processWithStagedAI(selectedText);
@@ -125,16 +183,13 @@ class WebReader {
 
   // 新的分階段AI處理流程
   async processWithStagedAI(selectedText) {
-    console.log('🚀 開始分階段AI處理流程');
+    console.log('🚀 建立離線版，等待用戶決定是否送往 AI');
 
     // 第一步：立即顯示離線排版
     this.showOfflineProcessingFirst(selectedText);
 
-    // 第二步：背景處理第一階段 (精簡+重點)
-    await this.processFirstStage(selectedText);
-
-    // 第三步：詢問用戶是否繼續第二階段
-    await this.handleFirstStageComplete();
+    // 未取得明確同意前不呼叫任何 AI 供應商。
+    this.showAIConsentDialog();
   }
 
   // 立即顯示離線排版
@@ -142,9 +197,17 @@ class WebReader {
     console.log('📄 立即顯示離線排版');
 
     // 生成簡單的離線排版內容並快取
-    const offlineContent = this.generateOfflineFormatting(selectedText);
+    const offlineContent = this.generateOfflineFormatting(
+      selectedText,
+      this.originalSelectedFragment
+    );
     this.offlineFormattedContent = offlineContent; // 快取離線內容
     this.selectedContent = offlineContent;
+
+    // 在建立工具列狀態前先進入離線模式，避免短暫顯示 AI 按鈕說明。
+    this.isOfflineMode = true;
+    this.isSimplifiedVersion = false;
+    this.currentFormatMode = 'Manual';
 
     // 先啟動讀者模式顯示離線內容
     this.activateReader();
@@ -165,17 +228,85 @@ class WebReader {
 
     // 統一更新狀態顯示
     this.updateAllStatusDisplays('離線排版', '離線版', '#ffeaa7', '#856404');
+    this.updateAIProcessButtonState();
+  }
 
-    // 設置當前為離線模式
-    this.isOfflineMode = true;
-    this.isSimplifiedVersion = false;
+  showAIConsentDialog() {
+    this.removeAIConsentDialog();
 
-    // 延遲一下再更新為AI處理狀態，讓用戶看到是離線排版
-    setTimeout(() => {
-      this.updateAllStatusDisplays('AI 精簡版處理中...', '離線版', '#fff3cd', '#856404');
-      // 顯示右上角通知
-      this.showStatusNotification('背景處理 AI 精簡版中...');
-    }, 1000);
+    const overlay = document.createElement('div');
+    overlay.id = 'ai-consent-overlay';
+
+    const dialog = document.createElement('div');
+    dialog.id = 'ai-consent-dialog';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'ai-consent-title');
+    dialog.innerHTML = `
+      <div class="ai-consent-icon" aria-hidden="true">✓</div>
+      <h3 id="ai-consent-title">離線版已完成</h3>
+      <p>是否繼續產生 AI 處理版？</p>
+      <p class="ai-consent-note">選擇「繼續」後，才會把本次內容送給已設定的 AI 供應商。</p>
+      <div class="ai-consent-actions">
+        <button id="ai-consent-continue" type="button">繼續 AI 處理</button>
+        <button id="ai-consent-stay" type="button">停在離線版</button>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(dialog);
+
+    document.getElementById('ai-consent-continue').onclick = () => {
+      this.removeAIConsentDialog();
+      this.startAIProcessing();
+    };
+    document.getElementById('ai-consent-stay').onclick = () => {
+      this.removeAIConsentDialog();
+      this.updateAIProcessButtonState();
+      this.showStatusNotification('已停在離線版，內容尚未送給 AI；需要時可點擊工具列「AI處理」');
+    };
+    document.getElementById('ai-consent-stay').focus();
+  }
+
+  removeAIConsentDialog() {
+    document.getElementById('ai-consent-dialog')?.remove();
+    document.getElementById('ai-consent-overlay')?.remove();
+  }
+
+  async startAIProcessing() {
+    if (this.isAIProcessing || this.aiProcessingStarted || !this.originalSelectedText) return;
+
+    this.removeAIConsentDialog();
+    this.isAIProcessing = true;
+    this.aiProcessingStarted = true;
+    this.updateAIProcessButtonState();
+    this.showStatusNotification('已確認送出，AI 精簡版處理中...');
+
+    try {
+      await this.processFirstStage(this.originalSelectedText);
+      await this.handleFirstStageComplete();
+    } finally {
+      this.isAIProcessing = false;
+      if (!this.simplifiedContent) {
+        this.aiProcessingStarted = false;
+      }
+      this.updateAIProcessButtonState();
+    }
+  }
+
+  updateAIProcessButtonState() {
+    const button = document.getElementById('reader-ai-process');
+    if (!button) return;
+
+    const shouldShow = this.isOfflineMode &&
+      !!this.originalSelectedText &&
+      (!this.simplifiedContent || this.isAIProcessing);
+    button.classList.toggle('reader-control-hidden', !shouldShow);
+    button.disabled = this.isAIProcessing || this.aiProcessingStarted;
+    button.textContent = this.isAIProcessing ? '🤖 AI處理中' : '🤖 AI處理';
+    button.title = this.isAIProcessing
+      ? 'AI 處理中'
+      : '將本次內容送給已設定的 AI 供應商處理';
   }
 
   // 統一更新所有狀態顯示 - 簡化版本
@@ -229,36 +360,358 @@ class WebReader {
   }
 
   // 生成離線排版內容
-  generateOfflineFormatting(selectedText) {
+  generateOfflineFormatting(selectedText, selectedFragment = null) {
     console.log('🔧 生成離線排版內容');
 
-    // 使用現有的預處理功能
-    const processedText = this.preprocessTextForManualFormatting(selectedText);
+    if (selectedFragment && selectedFragment.textContent.trim().length >= 10) {
+      const structured = this.createStructuredOfflineContent(selectedFragment);
+      if (structured.textContent.trim().length >= 10) {
+        console.log('✅ 使用選取範圍 DOM 生成離線排版');
+        return structured;
+      }
+    }
 
-    // 使用智能分組
-    const groupedContent = this.smartParagraphGrouping(processedText);
+    console.log('ℹ️ 無可用 DOM，改用保守純文字排版');
+    return this.createConservativeOfflineTextContent(selectedText);
+  }
 
-    // 轉換為HTML格式
-    const container = document.createElement('div');
-    const htmlContent = this.renderGroupedContent(groupedContent);
-    container.innerHTML = htmlContent;
+  createStructuredOfflineContent(selectedFragment) {
+    const source = document.createElement('div');
+    source.appendChild(selectedFragment.cloneNode(true));
 
-    // 🔍 調試：檢查生成的HTML中是否包含標題標籤
-    const headerTags = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
-    const chineseHeaders = Array.from(headerTags).filter(header =>
-      header.textContent.match(/^[一二三四五六七八九十]/)
-    );
-    console.log('🏷️ HTML中的中文標題標籤數量:', chineseHeaders.length);
-    chineseHeaders.forEach(header => {
-      console.log('🏷️ 標題標籤:', header.tagName, header.textContent.substring(0, 20) + '...');
+    source.querySelectorAll(
+      'script, style, noscript, template, form, button, input, select, textarea, ' +
+      '[hidden], [aria-hidden="true"], .ng-hide, .ng-cloak, .hidden, .hidden-print, ' +
+      '[style*="display: none" i], [style*="display:none" i], ' +
+      '[style*="visibility: hidden" i], [style*="visibility:hidden" i], ' +
+      '#web-reader-container'
+    ).forEach(element => element.remove());
+
+    const output = document.createElement('div');
+    output.className = 'reader-restructured-content reader-offline-content';
+
+    Array.from(source.childNodes).forEach(node => {
+      this.appendOfflineNode(node, output);
     });
 
-    // 🔍 調試：檢查容器中的實際HTML結構
-    console.log('📄 最終容器HTML結構:');
-    console.log(container.innerHTML.substring(0, 200) + '...');
+    this.addOfflineTableHeadings(output);
 
-    console.log('✅ 離線排版生成完成');
-    return container;
+    return output;
+  }
+
+  addOfflineTableHeadings(output) {
+    const wrappers = Array.from(output.querySelectorAll('.reader-table-wrapper'));
+    wrappers.forEach((wrapper, index) => {
+      if (wrapper.previousElementSibling?.classList.contains('reader-header')) return;
+
+      const table = wrapper.querySelector('table');
+      if (!table) return;
+      const heading = document.createElement('h2');
+      heading.className = 'reader-header reader-h2 reader-generated-heading';
+      heading.textContent = this.deriveOfflineTableTitle(table, index, wrappers.length);
+      wrapper.before(heading);
+    });
+  }
+
+  deriveOfflineTableTitle(table, index, tableCount) {
+    const headerText = Array.from(table.querySelectorAll('th'))
+      .map(cell => cell.textContent.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join(' ');
+    const allText = table.textContent.replace(/\s+/g, ' ').trim();
+    const sample = `${headerText} ${allText.slice(0, 240)}`;
+
+    if (/案由|決議|辦理情形|承辦|會議項目|報告事項|討論事項/.test(sample)) {
+      return '會議事項';
+    }
+    if (/姓名|單位|職稱|簽到|出席|列席|請假/.test(sample)) {
+      return '出席與簽到';
+    }
+    if (/會議名稱|日期|時間|地點|主席|記錄|紀錄/.test(sample)) {
+      return '會議資訊';
+    }
+    if (tableCount === 2) return index === 0 ? '會議資料' : '會議內容';
+    return `資料表 ${index + 1}`;
+  }
+
+  appendOfflineNode(node, target) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent.replace(/\s+/g, ' ').trim();
+      if (text.length >= 2) this.appendOfflineParagraph(node, target);
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = node.tagName.toLowerCase();
+
+    if (/^h[1-6]$/.test(tag)) {
+      const level = Math.min(Number(tag.slice(1)), 3);
+      const heading = document.createElement(`h${level}`);
+      heading.className = `reader-header reader-h${level}`;
+      this.appendSanitizedInline(node, heading);
+      if (heading.textContent.trim()) target.appendChild(heading);
+      return;
+    }
+
+    if (tag === 'table') {
+      const table = this.processTable(node);
+      if (table) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'reader-table-wrapper';
+        wrapper.appendChild(table);
+        target.appendChild(wrapper);
+      }
+      return;
+    }
+
+    if (tag === 'ul' || tag === 'ol') {
+      const list = this.createOfflineList(node, tag);
+      if (list.children.length) target.appendChild(list);
+      return;
+    }
+
+    if (tag === 'p' || tag === 'blockquote' || tag === 'pre') {
+      this.appendOfflineParagraph(node, target, tag === 'blockquote');
+      return;
+    }
+
+    if (tag === 'img' || tag === 'picture' || tag === 'figure') {
+      this.appendOfflineMedia(node, target);
+      return;
+    }
+
+    if (tag === 'video' || tag === 'audio' || tag === 'iframe') {
+      this.appendOfflineMedia(node, target);
+      return;
+    }
+
+    if (tag === 'hr') {
+      target.appendChild(document.createElement('hr'));
+      return;
+    }
+
+    const blockSelector = 'h1,h2,h3,h4,h5,h6,p,blockquote,pre,ul,ol,table,figure,img,video,audio,iframe,section,article';
+    const hasBlockChildren = !!node.querySelector(blockSelector);
+
+    if (hasBlockChildren) {
+      Array.from(node.childNodes).forEach(child => this.appendOfflineNode(child, target));
+    } else if (node.textContent.trim()) {
+      this.appendOfflineParagraph(node, target);
+    }
+  }
+
+  appendOfflineParagraph(source, target, isQuote = false) {
+    const paragraph = document.createElement(isQuote ? 'blockquote' : 'p');
+    paragraph.className = isQuote ? 'reader-quote' : 'reader-paragraph';
+    this.appendSanitizedInline(source, paragraph);
+
+    const text = paragraph.textContent.replace(/\s+/g, ' ').trim();
+    if (text.length < 2 && !paragraph.querySelector('a, img')) return;
+
+    if (this.isConservativeOfflineHeader(text)) {
+      const heading = document.createElement('h2');
+      heading.className = 'reader-header reader-h2';
+      while (paragraph.firstChild) heading.appendChild(paragraph.firstChild);
+      target.appendChild(heading);
+      return;
+    }
+
+    target.appendChild(paragraph);
+  }
+
+  appendSanitizedInline(source, target) {
+    const appendNode = (node, destination) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        destination.appendChild(document.createTextNode(node.textContent));
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'br') {
+        destination.appendChild(document.createElement('br'));
+        return;
+      }
+      if (tag === 'img') {
+        const image = this.createSafeOfflineImage(node);
+        if (image) destination.appendChild(image);
+        return;
+      }
+
+      let nextDestination = destination;
+      if (['strong', 'b', 'em', 'i', 'u', 's', 'code', 'mark', 'small', 'sup', 'sub'].includes(tag)) {
+        const safeTag = tag === 'b' ? 'strong' : tag === 'i' ? 'em' : tag;
+        nextDestination = document.createElement(safeTag);
+        destination.appendChild(nextDestination);
+      } else if (tag === 'a') {
+        const url = node.href || node.getAttribute('href');
+        if (this.isSafeOfflineUrl(url)) {
+          nextDestination = document.createElement('a');
+          nextDestination.href = url;
+          nextDestination.target = '_blank';
+          nextDestination.rel = 'noopener noreferrer';
+          nextDestination.className = 'reader-link';
+          destination.appendChild(nextDestination);
+        }
+      }
+
+      Array.from(node.childNodes).forEach(child => appendNode(child, nextDestination));
+
+      if (['div', 'section', 'article'].includes(tag) && destination.lastChild &&
+          destination.lastChild.nodeName !== 'BR') {
+        destination.appendChild(document.createElement('br'));
+      }
+    };
+
+    if (source.nodeType === Node.TEXT_NODE) {
+      appendNode(source, target);
+    } else {
+      Array.from(source.childNodes).forEach(child => appendNode(child, target));
+    }
+  }
+
+  createOfflineList(source, tagName = 'ul') {
+    const list = document.createElement(tagName === 'ol' ? 'ol' : 'ul');
+    list.className = 'reader-list';
+
+    Array.from(source.children).forEach(child => {
+      if (child.tagName.toLowerCase() !== 'li') return;
+      const item = document.createElement('li');
+      item.className = 'reader-list-item';
+
+      Array.from(child.childNodes).forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE && ['ul', 'ol'].includes(node.tagName.toLowerCase())) {
+          item.appendChild(this.createOfflineList(node, node.tagName.toLowerCase()));
+        } else {
+          this.appendSanitizedInline(node, item);
+        }
+      });
+
+      if (item.textContent.trim() || item.children.length) list.appendChild(item);
+    });
+
+    return list;
+  }
+
+  appendOfflineMedia(source, target) {
+    const figure = document.createElement('figure');
+    figure.className = 'reader-media';
+    const tag = source.tagName.toLowerCase();
+
+    if (tag === 'img') {
+      const image = this.createSafeOfflineImage(source);
+      if (image) figure.appendChild(image);
+    } else {
+      source.querySelectorAll('img').forEach(imageSource => {
+        const image = this.createSafeOfflineImage(imageSource);
+        if (image) figure.appendChild(image);
+      });
+    }
+
+    const mediaSource = source.currentSrc || source.src || source.getAttribute('src');
+    if (['video', 'audio'].includes(tag) && this.isSafeOfflineUrl(mediaSource)) {
+      const media = document.createElement(tag);
+      media.src = mediaSource;
+      media.controls = true;
+      media.preload = 'metadata';
+      figure.appendChild(media);
+    } else if (tag === 'iframe' && this.isSafeOfflineUrl(mediaSource)) {
+      const link = document.createElement('a');
+      link.href = mediaSource;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.className = 'reader-link reader-embedded-link';
+      link.textContent = source.title || '開啟內嵌內容';
+      figure.appendChild(link);
+    }
+
+    const captionSource = tag === 'figure' ? source.querySelector('figcaption') : null;
+    const captionText = captionSource?.textContent.trim() || source.alt || source.title || '';
+    if (captionText) {
+      const caption = document.createElement('figcaption');
+      caption.textContent = captionText;
+      figure.appendChild(caption);
+    }
+
+    if (figure.children.length) target.appendChild(figure);
+  }
+
+  createSafeOfflineImage(source) {
+    const url = source.currentSrc || source.src || source.getAttribute('src');
+    if (!this.isSafeOfflineUrl(url, true)) return null;
+
+    const image = document.createElement('img');
+    image.src = url;
+    image.alt = source.alt || '';
+    image.loading = 'lazy';
+    image.className = 'reader-image';
+    return image;
+  }
+
+  isSafeOfflineUrl(url, allowImageData = false) {
+    if (!url) return false;
+    const normalized = String(url).trim();
+    if (/^(https?:|mailto:|tel:|blob:)/i.test(normalized)) return true;
+    return allowImageData && /^data:image\/(?:png|jpeg|gif|webp|svg\+xml);/i.test(normalized);
+  }
+
+  createConservativeOfflineTextContent(selectedText) {
+    const output = document.createElement('div');
+    output.className = 'reader-restructured-content reader-offline-content';
+    const lines = selectedText
+      .replace(/\r\n?|\t/g, '\n')
+      .split('\n')
+      .map(line => line.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+
+    let activeList = null;
+    lines.forEach(line => {
+      if (this.isConservativeOfflineHeader(line)) {
+        activeList = null;
+        const heading = document.createElement('h2');
+        heading.className = 'reader-header reader-h2';
+        heading.textContent = line;
+        output.appendChild(heading);
+      } else if (this.isOfflineListItem(line)) {
+        if (!activeList) {
+          activeList = document.createElement('ul');
+          activeList.className = 'reader-list';
+          output.appendChild(activeList);
+        }
+        const item = document.createElement('li');
+        item.className = 'reader-list-item';
+        item.textContent = this.cleanListItemPrefix(line);
+        activeList.appendChild(item);
+      } else {
+        activeList = null;
+        const paragraph = document.createElement('p');
+        paragraph.className = 'reader-paragraph';
+        paragraph.textContent = line;
+        output.appendChild(paragraph);
+      }
+    });
+
+    return output;
+  }
+
+  isConservativeOfflineHeader(text) {
+    const trimmed = text.replace(/\s+/g, ' ').trim();
+    if (trimmed.length < 2 || trimmed.length > 40) return false;
+    if (/[。！？；]/.test(trimmed)) return false;
+    if (/^\d{2,4}[\/\-.年]\d{1,2}/.test(trimmed)) return false;
+
+    const meetingHeaders = /^(會議記錄|會議名稱|報告事項|討論事項|提案討論|臨時動議|主席裁示|主席結論|散會|案由|說明|決議|結論|辦理情形|追蹤事項|附件)(?:[：:]|$)/;
+    if (meetingHeaders.test(trimmed)) return true;
+    if (/^[^：:]{2,18}[：:]$/.test(trimmed)) return true;
+
+    const numbered = /^(?:第[一二三四五六七八九十\d]+(?:案|項|節)|[一二三四五六七八九十]+[、．]|\d+[、.])\s*/;
+    return numbered.test(trimmed) && trimmed.length <= 28;
+  }
+
+  isOfflineListItem(text) {
+    const trimmed = text.trim();
+    return /^(?:[-*•●○▪▫]|\(?\d+\)|\([一二三四五六七八九十]+\)|[甲乙丙丁戊己庚辛壬癸][、．])\s*/.test(trimmed) ||
+      /^(?:\d+|[一二三四五六七八九十]+)[、．.]\s+/.test(trimmed);
   }
 
   // 渲染分組內容為HTML
@@ -497,6 +950,7 @@ class WebReader {
 
     // 統一更新狀態
     this.updateAllStatusDisplays('AI 精簡版', '精簡版', '#d4edda', '#155724');
+    this.updateAIProcessButtonState();
   }
 
   // 開始第二階段處理
@@ -633,9 +1087,8 @@ class WebReader {
     } catch (error) {
       console.error(`處理${isSimplified ? '精簡' : '原文'}模式失敗:`, error);
 
-      // 降級到規則式處理
-      const fallbackContent = this.processTextContent(selectedText);
-      return fallbackContent;
+      // 離線版已是正式降級路徑；AI 失敗不得將本機規則結果誤報為 AI 完成。
+      throw error;
     }
   }
 
@@ -1385,13 +1838,20 @@ class WebReader {
 
   // 新增：處理單個表格
   processTable(table) {
-    const rows = table.querySelectorAll('tr');
+    const rows = Array.from(table.rows || table.querySelectorAll('tr'));
     if (rows.length === 0) return null;
 
     console.log(`處理表格，包含 ${rows.length} 行`);
 
     const newTable = document.createElement('table');
     newTable.className = 'reader-table';
+
+    const captionText = table.querySelector('caption')?.textContent.trim();
+    if (captionText) {
+      const caption = document.createElement('caption');
+      caption.textContent = captionText;
+      newTable.appendChild(caption);
+    }
 
     // 檢測表頭
     const hasHeader = this.detectTableHeader(table);
@@ -1405,10 +1865,10 @@ class WebReader {
 
       cells.forEach(cell => {
         const text = cell.textContent.trim();
-        if (text.length === 0) return;
+        if (text.length === 0 && !cell.querySelector('img, a[href]')) return;
 
         let newCell;
-        const isHeader = hasHeader && rowIndex === 0;
+        const isHeader = cell.tagName.toLowerCase() === 'th' || (hasHeader && rowIndex === 0);
 
         if (isHeader) {
           newCell = document.createElement('th');
@@ -1418,9 +1878,20 @@ class WebReader {
           newCell.className = 'reader-table-cell';
         }
 
-        newCell.textContent = text;
+        if (cell.colSpan > 1) newCell.colSpan = cell.colSpan;
+        if (cell.rowSpan > 1) newCell.rowSpan = cell.rowSpan;
+        this.appendSanitizedInline(cell, newCell);
         newRow.appendChild(newCell);
       });
+
+      // ESA 常用跨欄短列作為章節標題，保留成目錄錨點而不拆散表格。
+      if (newRow.children.length === 1) {
+        const onlyCell = newRow.firstElementChild;
+        const rowText = onlyCell.textContent.replace(/\s+/g, ' ').trim();
+        if (this.isConservativeOfflineHeader(rowText)) {
+          onlyCell.classList.add('reader-header', 'reader-h2', 'reader-table-section');
+        }
+      }
 
       if (newRow.children.length > 0) {
         newTable.appendChild(newRow);
@@ -2197,6 +2668,12 @@ ${text}`;
 
     // 按照用戶設定的優先順序嘗試各個提供商
     for (const modelKey of modelPriority) {
+      // 離線版已在取得同意前完成，不可在 AI 流程中冒充成功供應商。
+      if (modelKey === 'manual') {
+        console.log('ℹ️ 略過離線排版；AI 失敗時維持現有離線版');
+        continue;
+      }
+
       const provider = allProviders[modelKey];
       if (!provider) {
         console.warn(`⚠️ 未知的模型類型: ${modelKey}`);
@@ -3242,14 +3719,131 @@ ${text}
       const selection = window.getSelection();
       if (selection.toString().trim().length > 0) {
         this.startWithSelectedContent(selection.toString());
-      } else {
-        // 沒有選取內容時顯示提示
+      } else if (!this.tryStartWithAutoDetectedContent()) {
+        // 非支援頁面且沒有選取內容時顯示提示
         this.showNoSelectionMessage();
       }
     }
   }
 
+  tryStartWithAutoDetectedContent() {
+    const detected = this.detectEsaMeetingContent();
+    if (!detected) return false;
+
+    console.log('使用 ESA 會議頁自動擷取內容啟動簡報模式');
+    this.startWithSelectedContent(detected.text, detected.fragment);
+    return true;
+  }
+
+  detectEsaMeetingContent() {
+    const isEsaHost = location.hostname.toLowerCase() === 'esa.ntpc.edu.tw';
+    const isMeetingPrint = /\/web-meeting2\/templates\/MeetingPrint\.html$/i.test(location.pathname);
+    if (!isEsaHost) return null;
+
+    if (isMeetingPrint) {
+      const tables = Array.from(document.querySelectorAll('table'))
+        .filter(table => !table.closest('#web-reader-container'))
+        .filter(table => this.isVisibleSourceElement(table))
+        .filter(table => table.innerText.trim().length > 0);
+
+      return this.buildEsaDetectedContent(tables, 'esa-meeting-print');
+    }
+
+    const isMeetingManagement = /\/web-module_list\/rest\/service\/main/i.test(location.pathname) &&
+      (location.hash.includes('meeting/meetingContent') || !!document.querySelector('.meeting'));
+    if (!isMeetingManagement) return null;
+
+    const meetingRoot = document.querySelector('.meeting.ng-scope, .meeting');
+    if (!meetingRoot) return null;
+
+    const headerTitle = meetingRoot.querySelector(':scope > .meeting-header--title');
+    const headerInfo = meetingRoot.querySelector(':scope > .meeting-header > .meeting-header--info');
+    const reportCards = Array.from(
+      meetingRoot.querySelectorAll('.meeting-card.meeting-card--yellow')
+    ).filter(card => {
+      if (!this.isVisibleSourceElement(card)) return false;
+      return Array.from(card.querySelectorAll('.meeting-card-content')).some(content =>
+        this.isVisibleSourceElement(content) && content.innerText.trim().length > 0
+      );
+    });
+
+    // ESA 會議內容頁後半還有「編輯完成」「出席簽到」「人員簽收」與
+    // 「公開閱覽」等管理卡；它們不是會議簡報內容，不得整塊擷取。
+    const contentSections = [headerTitle, headerInfo, ...reportCards]
+      .filter(Boolean)
+      .filter(element => this.isVisibleSourceElement(element))
+      .filter(element => !element.closest('#web-reader-container'))
+      .filter(element => element.innerText.trim().length > 0);
+
+    return this.buildEsaDetectedContent(contentSections, 'esa-meeting-management');
+  }
+
+  buildEsaDetectedContent(elements, sourceName) {
+    if (!elements.length) return null;
+
+    const staging = document.createElement('div');
+    elements.forEach(element => staging.appendChild(element.cloneNode(true)));
+    staging.querySelectorAll(
+      'script, style, noscript, template, form, button, input, select, textarea, ' +
+      '[hidden], [aria-hidden="true"], .ng-hide, .ng-cloak, .hidden, .hidden-print, .modal, ' +
+      '[style*="display: none" i], [style*="display:none" i], ' +
+      '[style*="visibility: hidden" i], [style*="visibility:hidden" i]'
+    ).forEach(element => element.remove());
+
+    if (sourceName === 'esa-meeting-management') {
+      staging.querySelectorAll(
+        '.select-button, .sort_btn, .meeting-header--total, ' +
+        '.meeting-card--green, .meeting-card--teal, .meeting-card--blue, .meeting-card--purple'
+      ).forEach(element => element.remove());
+
+      // 各處室在 ESA 內部都可能將自己的第一項寫成「一、」；合併為整場
+      // 會議簡報後必須重新連續編號，否則目錄與內文會全部顯示「一、」。
+      Array.from(staging.querySelectorAll('.meeting-card-content--title')).forEach((title, index) => {
+        const original = title.textContent.replace(/\s+/g, ' ').trim();
+        const withoutNumber = original
+          .replace(/^\s*(?:[一二三四五六七八九十百零]+|\d+)[、．.)）]\s*/, '')
+          .trim();
+        if (!withoutNumber) return;
+
+        title.textContent = `${this.toChineseSectionNumber(index + 1)}、${withoutNumber}`;
+        title.setAttribute('data-reader-esa-section-title', 'true');
+      });
+    }
+
+    const text = Array.from(staging.children)
+      .map(element => element.textContent.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n\n');
+    if (text.length < 20) return null;
+
+    const fragment = document.createDocumentFragment();
+    while (staging.firstChild) fragment.appendChild(staging.firstChild);
+    return { text, fragment, source: sourceName };
+  }
+
+  toChineseSectionNumber(value) {
+    const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    if (value < 10) return digits[value];
+    if (value === 10) return '十';
+    if (value < 20) return `十${digits[value - 10]}`;
+    if (value < 100) {
+      const tens = Math.floor(value / 10);
+      const ones = value % 10;
+      return `${digits[tens]}十${ones ? digits[ones] : ''}`;
+    }
+    return String(value);
+  }
+
+  isVisibleSourceElement(element) {
+    const style = getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden' &&
+      element.getAttribute('aria-hidden') !== 'true';
+  }
+
   showNoSelectionMessage() {
+    this.originalSelectedText = null;
+    this.originalSelectedFragment = null;
+    this.offlineFormattedContent = null;
     const container = document.getElementById('web-reader-container');
     container.classList.remove('web-reader-hidden');
     container.classList.add('web-reader-active');
@@ -3259,16 +3853,16 @@ ${text}
       <div class="reader-instruction">
         <h2>如何使用網頁簡報器</h2>
         <ol>
-          <li>在網頁上選取要展示的文字內容</li>
-          <li>右鍵點擊選取的文字</li>
-          <li>選擇「啟動簡報模式」</li>
+          <li>ESA 會議列印頁可直接點擊擴充功能啟動</li>
+          <li>其他網頁請先選取要展示的內容</li>
+          <li>再點擊擴充功能，或使用右鍵「啟動簡報模式」</li>
         </ol>
-        <p>或者先選取文字，再點擊擴充功能圖示</p>
       </div>
     `;
 
     document.body.classList.add('reader-mode');
     this.isActive = true;
+    this.updateAIProcessButtonState();
     this.saveSettings();
   }
 
@@ -3288,6 +3882,7 @@ ${text}
       contentContainer.appendChild(this.selectedContent);
 
       // 處理標題和建立目錄
+      this.currentSection = 0;
       this.processHeaders(this.selectedContent);
       this.buildTableOfContents();
       this.updateProgress();
@@ -3320,16 +3915,23 @@ ${text}
     this.updateVersionButton();
 
     // 重點模式按鈕
-    const highlightButton = document.getElementById('reader-highlight-mode');
-    if (highlightButton) {
-      highlightButton.classList.toggle('active', this.isHighlightMode);
-      highlightButton.title = this.isHighlightMode ? '關閉畫重點模式' : 'AI畫重點模式';
-      highlightButton.textContent = '✨';
-      highlightButton.disabled = false;
-    }
+    this.updateHighlightButtonState();
+    this.updateAIProcessButtonState();
 
     // 更新狀態顯示
     this.updateStatusDisplay();
+  }
+
+  updateHighlightButtonState() {
+    const highlightButton = document.getElementById('reader-highlight-mode');
+    if (!highlightButton) return;
+
+    highlightButton.classList.toggle('active', this.isHighlightMode);
+    highlightButton.title = this.isHighlightMode
+      ? '關閉畫重點模式'
+      : (this.isOfflineMode ? '本機畫重點模式' : 'AI畫重點模式');
+    highlightButton.textContent = '✨';
+    highlightButton.disabled = false;
   }
 
   // 更新狀態顯示 - 重定向到統一函數
@@ -3339,6 +3941,7 @@ ${text}
   }
 
   deactivateReader() {
+    this.removeAIConsentDialog();
     const container = document.getElementById('web-reader-container');
     container.classList.remove('web-reader-active');
     container.classList.add('web-reader-hidden');
@@ -3405,15 +4008,14 @@ ${text}
       highlightModeBtn.title = this.isHighlightMode ? '關閉畫重點模式' : 'AI畫重點模式';
     }
 
-    // 根據不同模式調整按鈕可用性
+    // 根據不同模式調整按鈕說明；離線版使用本機規則式標記。
     if (this.isOfflineMode) {
-      // 離線模式下：版本切換可用，畫重點功能禁用
       if (versionToggleBtn) {
-        versionToggleBtn.disabled = false; // 允許切換到AI版本
+        versionToggleBtn.disabled = false;
       }
       if (highlightModeBtn) {
-        highlightModeBtn.disabled = true;
-        highlightModeBtn.title = '離線版不支援畫重點功能';
+        highlightModeBtn.disabled = false;
+        highlightModeBtn.title = this.isHighlightMode ? '關閉畫重點模式' : '本機畫重點模式';
       }
     } else {
       // AI模式下：所有功能都可用
@@ -3459,7 +4061,13 @@ ${text}
   scrollToSection(index) {
     if (index >= 0 && index < this.sections.length) {
       this.currentSection = index;
-      this.sections[index].scrollIntoView({ behavior: 'smooth' });
+      const scroller = document.getElementById('web-reader-content');
+      const section = this.sections[index];
+      if (scroller && section) {
+        const targetTop = section.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top + scroller.scrollTop - 24;
+        scroller.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+      }
 
       // 立即更新進度顯示（使用手動設定的 currentSection）
       this.updateProgress();
@@ -3521,6 +4129,8 @@ ${text}
 
     // 更新按鈕狀態
     this.updateVersionButton();
+    this.updateHighlightButtonState();
+    this.updateAIProcessButtonState();
 
     // 更新內容顯示和狀態
     this.updateContentDisplay();
@@ -3551,7 +4161,8 @@ ${text}
   // 重點模式切換功能（優化版：直接切換顯示）
   toggleHighlightMode() {
     // 檢查是否有重點數據可以顯示
-    if (!this.highlightData || Object.keys(this.highlightData).length === 0) {
+    if (!this.isOfflineMode &&
+        (!this.highlightData || Object.keys(this.highlightData).length === 0)) {
       console.log('❌ 沒有重點數據可以顯示，請先選取內容重新格式化');
 
       // 顯示提示訊息
@@ -3575,7 +4186,9 @@ ${text}
     const highlightButton = document.getElementById('reader-highlight-mode');
     if (highlightButton) {
       highlightButton.classList.toggle('active', this.isHighlightMode);
-      highlightButton.title = this.isHighlightMode ? '關閉畫重點模式' : 'AI畫重點模式';
+      highlightButton.title = this.isHighlightMode
+        ? '關閉畫重點模式'
+        : (this.isOfflineMode ? '本機畫重點模式' : 'AI畫重點模式');
     }
 
     console.log('🔄 重點模式', this.isHighlightMode ? '開啟' : '關閉', '(即時切換)');
@@ -3591,9 +4204,14 @@ ${text}
     let contentToShow = null;
 
     if (this.isOfflineMode) {
-      // 離線模式：顯示離線排版內容（重點模式在離線版不可用）
-      contentToShow = this.offlineFormattedContent || this.processTextContent(this.originalSelectedText);
-      console.log('📄 顯示離線版內容');
+      if (this.isHighlightMode) {
+        contentToShow = this.getOfflineHighlightedContent();
+        console.log('✨ 顯示離線版 + 本機重點');
+      } else {
+        contentToShow = this.offlineFormattedContent ||
+          this.generateOfflineFormatting(this.originalSelectedText, this.originalSelectedFragment);
+        console.log('📄 顯示離線版內容');
+      }
     } else if (this.isHighlightMode && this.highlightData) {
       // 重點模式開啟且有重點數據（僅AI模式可用）
       if (this.isSimplifiedVersion) {
@@ -3620,6 +4238,58 @@ ${text}
     }
   }
 
+  getOfflineHighlightedContent() {
+    if (this.offlineHighlightedContent) return this.offlineHighlightedContent;
+    if (!this.offlineFormattedContent) return null;
+
+    const highlighted = this.offlineFormattedContent.cloneNode(true);
+    const walker = document.createTreeWalker(
+      highlighted,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: node => {
+          if (!node.textContent.trim()) return NodeFilter.FILTER_REJECT;
+          if (node.parentElement?.closest('script, style, .reader-highlight')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    textNodes.forEach(node => this.highlightOfflineTextNode(node));
+
+    this.offlineHighlightedContent = highlighted;
+    return highlighted;
+  }
+
+  highlightOfflineTextNode(textNode) {
+    const text = textNode.textContent;
+    const pattern = /((?:民國)?\d{2,4}年\d{1,2}月\d{1,2}日|\d{2,4}[\/.-]\d{1,2}[\/.-]\d{1,2}|(?:[01]?\d|2[0-3])[:：][0-5]\d|決議|結論|主席裁示|承辦(?:單位|人)?|辦理期限|期限|截止|列管|應辦|請於|務必|完成|延期|取消|注意事項|附件)/g;
+    let match;
+    let cursor = 0;
+    const fragment = document.createDocumentFragment();
+
+    while ((match = pattern.exec(text)) !== null) {
+      if (match.index > cursor) {
+        fragment.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+      }
+      const mark = document.createElement('span');
+      mark.className = 'reader-highlight reader-local-highlight';
+      mark.textContent = match[0];
+      fragment.appendChild(mark);
+      cursor = match.index + match[0].length;
+    }
+
+    if (cursor === 0) return;
+    if (cursor < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+    textNode.replaceWith(fragment);
+  }
+
   // 重新整理內容顯示
   refreshContent() {
     const contentContainer = document.getElementById('reader-main-content');
@@ -3627,6 +4297,10 @@ ${text}
 
     contentContainer.innerHTML = '';
     contentContainer.appendChild(this.selectedContent);
+
+    const scroller = document.getElementById('web-reader-content');
+    if (scroller) scroller.scrollTop = 0;
+    this.currentSection = 0;
 
     // 重新處理標題和建立目錄
     this.processHeaders(this.selectedContent);
@@ -3643,8 +4317,9 @@ ${text}
   }
 
   updateProgress() {
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const scroller = document.getElementById('web-reader-content');
+    const scrollTop = scroller ? scroller.scrollTop : 0;
+    const scrollHeight = scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
     const progress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
 
     const progressFill = document.getElementById('progress-fill');
@@ -3664,14 +4339,23 @@ ${text}
       // 確保 currentSection 在有效範圍內
       currentSection = Math.max(0, Math.min(currentSection, this.sections.length - 1));
       progressText.textContent = `${currentSection + 1} / ${this.sections.length}`;
+    } else if (progressText) {
+      progressText.textContent = '0 / 0';
     }
   }
 
   getCurrentSection() {
-    const scrollTop = window.pageYOffset + 100;
+    const scroller = document.getElementById('web-reader-content');
+    if (!scroller) return 0;
+    const remaining = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+    if (remaining <= 4 && this.sections.length > 0) {
+      return this.sections.length - 1;
+    }
+    const threshold = scroller.getBoundingClientRect().top + 120;
+
     for (let i = this.sections.length - 1; i >= 0; i--) {
       const section = this.sections[i];
-      if (section.offsetTop <= scrollTop) {
+      if (section.getBoundingClientRect().top <= threshold) {
         return i;
       }
     }
