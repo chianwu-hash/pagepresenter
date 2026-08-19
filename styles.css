@@ -935,6 +935,100 @@ body.reader-mode {
 }
 
 /* ============================================
+   原文作者重點：只接受 content.js 映射後的安全類別
+   ============================================ */
+
+#reader-main-content .reader-source-emphasis.reader-source-bold {
+  font-weight: 700 !important;
+}
+
+#reader-main-content .reader-source-emphasis.reader-source-italic {
+  font-style: italic !important;
+}
+
+#reader-main-content .reader-source-emphasis.reader-source-underline {
+  text-decoration-line: underline !important;
+  text-decoration-thickness: 2px !important;
+  text-underline-offset: 0.12em !important;
+}
+
+#reader-main-content .reader-source-emphasis.reader-source-strike {
+  text-decoration-line: line-through !important;
+}
+
+#reader-main-content .reader-source-emphasis.reader-source-highlight {
+  background: #ffe082 !important;
+  color: #4e342e !important;
+  padding: 0.02em 0.16em !important;
+  border-radius: 0.14em !important;
+  box-decoration-break: clone !important;
+  -webkit-box-decoration-break: clone !important;
+}
+
+#reader-main-content .reader-source-emphasis.reader-source-highlight * {
+  color: #4e342e !important;
+}
+
+#reader-main-content .reader-source-emphasis.reader-source-critical,
+#reader-main-content .reader-source-emphasis.reader-source-critical * {
+  color: #d32f2f !important;
+  font-weight: 700 !important;
+}
+
+#reader-main-content .reader-source-emphasis.reader-source-info,
+#reader-main-content .reader-source-emphasis.reader-source-info * {
+  color: #1565c0 !important;
+}
+
+#reader-main-content .reader-source-emphasis.reader-source-positive,
+#reader-main-content .reader-source-emphasis.reader-source-positive * {
+  color: #2e7d32 !important;
+}
+
+#reader-main-content .reader-source-emphasis.reader-source-accent,
+#reader-main-content .reader-source-emphasis.reader-source-accent * {
+  color: #7b1fa2 !important;
+}
+
+.high-contrast #reader-main-content .reader-source-emphasis.reader-source-highlight {
+  background: #ffeb3b !important;
+  color: #000 !important;
+}
+
+.high-contrast #reader-main-content .reader-source-emphasis.reader-source-critical,
+.high-contrast #reader-main-content .reader-source-emphasis.reader-source-critical * {
+  color: #ff8a80 !important;
+}
+
+.high-contrast #reader-main-content .reader-source-emphasis.reader-source-info,
+.high-contrast #reader-main-content .reader-source-emphasis.reader-source-info * {
+  color: #82b1ff !important;
+}
+
+.high-contrast #reader-main-content .reader-source-emphasis.reader-source-positive,
+.high-contrast #reader-main-content .reader-source-emphasis.reader-source-positive * {
+  color: #b9f6ca !important;
+}
+
+.high-contrast #reader-main-content .reader-source-emphasis.reader-source-accent,
+.high-contrast #reader-main-content .reader-source-emphasis.reader-source-accent * {
+  color: #ea80fc !important;
+}
+
+#reader-main-content.reader-source-highlights-hidden .reader-source-emphasis,
+#reader-main-content.reader-source-highlights-hidden .reader-source-emphasis * {
+  background: transparent !important;
+  color: inherit !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-weight: inherit !important;
+  font-style: inherit !important;
+  text-decoration: none !important;
+}
+
+/* ============================================
    AI畫重點模式樣式
    ============================================ */
 

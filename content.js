@@ -16,9 +16,9 @@ class WebReader {
     this.simplifiedContent = null; // AI精簡版本快取
     this.originalFormattedContent = null; // 原文排版版本快取
     this.offlineFormattedContent = null; // 離線排版版本快取
-    this.offlineHighlightedContent = null; // 離線規則式重點版本快取
     this.isSimplifiedVersion = true; // 當前版本狀態：true=精簡版, false=原文版
     this.isOfflineMode = false; // 是否為離線模式
+    this.showSourceHighlights = true; // 離線版預設保留並顯示原文作者的重點
     this.isHighlightMode = false; // 畫重點模式狀態
     this.highlightData = null; // AI畫重點數據快取
     this.simplifiedHighlighted = null; // 精簡版重點標記內容
@@ -53,7 +53,7 @@ class WebReader {
           <button id="reader-contrast" title="高對比模式">◐</button>
           <span class="divider">|</span>
           <button id="reader-version-toggle" title="切換版本 (精簡版/原文版)">📄</button>
-          <button id="reader-highlight-mode" title="AI畫重點模式">✨</button>
+          <button id="reader-highlight-mode" title="顯示或隱藏原文重點">✨</button>
           <button id="reader-ai-process" title="送給 AI 處理">🤖 AI處理</button>
         </div>
         <div class="toolbar-right">
@@ -106,7 +106,7 @@ class WebReader {
     document.getElementById('reader-ai-process').onclick = () => this.startAIProcessing();
     document.getElementById('sidebar-toggle').onclick = () => this.toggleSidebar();
 
-    // 使用事件委派，讓離線畫重點所產生的 clone 也能開啟附件。
+    // 使用事件委派，讓離線內容重新掛載後仍能開啟附件。
     document.getElementById('reader-main-content').addEventListener('click', (event) => {
       const attachmentButton = event.target.closest('[data-reader-attachment-id]');
       if (!attachmentButton) return;
@@ -183,7 +183,6 @@ class WebReader {
     this.esaAttachmentSources = attachmentSources instanceof Map
       ? attachmentSources
       : new Map();
-    this.offlineHighlightedContent = null;
     this.simplifiedContent = null;
     this.originalFormattedContent = null;
     this.simplifiedHighlighted = null;
@@ -222,6 +221,7 @@ class WebReader {
     // 在建立工具列狀態前先進入離線模式，避免短暫顯示 AI 按鈕說明。
     this.isOfflineMode = true;
     this.isSimplifiedVersion = false;
+    this.showSourceHighlights = true;
     this.currentFormatMode = 'Manual';
 
     // 先啟動讀者模式顯示離線內容
@@ -337,11 +337,14 @@ class WebReader {
 
     // 更新重點狀態
     const highlightStatus = document.getElementById('highlight-status');
+    const highlightsVisible = this.isOfflineMode ? this.showSourceHighlights : this.isHighlightMode;
     if (highlightStatus) {
-      highlightStatus.textContent = this.isHighlightMode ? '畫重點: 開' : '畫重點: 關';
+      highlightStatus.textContent = this.isOfflineMode
+        ? `原文重點: ${highlightsVisible ? '顯示' : '隱藏'}`
+        : `AI重點: ${highlightsVisible ? '開' : '關'}`;
     }
 
-    console.log(`🔄 狀態更新: ${statusInfo.version} | 重點: ${this.isHighlightMode ? '開' : '關'}`);
+    console.log(`🔄 狀態更新: ${statusInfo.version} | 重點: ${highlightsVisible ? '顯示' : '隱藏'}`);
   }
 
   // 新增：根據當前狀態計算應該顯示的資訊
@@ -588,21 +591,30 @@ class WebReader {
         return;
       }
 
+      const sourceEmphasisClasses = this.getSourceEmphasisClasses(node);
       let nextDestination = destination;
+      let safeElement = null;
       if (['strong', 'b', 'em', 'i', 'u', 's', 'code', 'mark', 'small', 'sup', 'sub'].includes(tag)) {
         const safeTag = tag === 'b' ? 'strong' : tag === 'i' ? 'em' : tag;
-        nextDestination = document.createElement(safeTag);
-        destination.appendChild(nextDestination);
+        safeElement = document.createElement(safeTag);
       } else if (tag === 'a') {
         const url = node.href || node.getAttribute('href');
         if (this.isSafeOfflineUrl(url)) {
-          nextDestination = document.createElement('a');
-          nextDestination.href = url;
-          nextDestination.target = '_blank';
-          nextDestination.rel = 'noopener noreferrer';
-          nextDestination.className = 'reader-link';
-          destination.appendChild(nextDestination);
+          safeElement = document.createElement('a');
+          safeElement.href = url;
+          safeElement.target = '_blank';
+          safeElement.rel = 'noopener noreferrer';
+          safeElement.className = 'reader-link';
         }
+      }
+
+      if (!safeElement && sourceEmphasisClasses.length) {
+        safeElement = document.createElement('span');
+      }
+      if (safeElement) {
+        safeElement.classList.add(...sourceEmphasisClasses);
+        destination.appendChild(safeElement);
+        nextDestination = safeElement;
       }
 
       Array.from(node.childNodes).forEach(child => appendNode(child, nextDestination));
@@ -618,6 +630,84 @@ class WebReader {
     } else {
       Array.from(source.childNodes).forEach(child => appendNode(child, target));
     }
+  }
+
+  getSourceEmphasisClasses(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE) return [];
+
+    const classes = new Set();
+    const tag = node.tagName.toLowerCase();
+    const inlineStyle = node.style;
+
+    if (['strong', 'b'].includes(tag) || /^(bold|bolder)$/i.test(inlineStyle.fontWeight) ||
+        Number.parseInt(inlineStyle.fontWeight, 10) >= 600) {
+      classes.add('reader-source-emphasis');
+      classes.add('reader-source-bold');
+    }
+    if (['em', 'i'].includes(tag) || inlineStyle.fontStyle === 'italic') {
+      classes.add('reader-source-emphasis');
+      classes.add('reader-source-italic');
+    }
+    const textDecoration = `${inlineStyle.textDecorationLine} ${inlineStyle.textDecoration}`;
+    if (tag === 'u' || /underline/i.test(textDecoration)) {
+      classes.add('reader-source-emphasis');
+      classes.add('reader-source-underline');
+    }
+    if (tag === 's' || /line-through/i.test(textDecoration)) {
+      classes.add('reader-source-emphasis');
+      classes.add('reader-source-strike');
+    }
+    if (tag === 'mark' || this.isVisibleSourceBackground(inlineStyle.backgroundColor)) {
+      classes.add('reader-source-emphasis');
+      classes.add('reader-source-highlight');
+    }
+
+    const colorValue = inlineStyle.color || node.getAttribute('color');
+    const colorClass = this.classifySourceTextColor(colorValue);
+    if (colorClass) {
+      classes.add('reader-source-emphasis');
+      classes.add(colorClass);
+    }
+
+    return Array.from(classes);
+  }
+
+  parseSourceColor(value) {
+    if (!value || !CSS.supports('color', value)) return null;
+    const probe = document.createElement('span');
+    probe.style.color = value;
+    probe.style.position = 'absolute';
+    probe.style.visibility = 'hidden';
+    document.documentElement.appendChild(probe);
+    const computed = getComputedStyle(probe).color;
+    probe.remove();
+
+    const match = computed.match(/rgba?\(\s*(\d+)\D+(\d+)\D+(\d+)(?:\D+([\d.]+))?\s*\)/i);
+    if (!match) return null;
+    return {
+      r: Number(match[1]),
+      g: Number(match[2]),
+      b: Number(match[3]),
+      a: match[4] === undefined ? 1 : Number(match[4])
+    };
+  }
+
+  isVisibleSourceBackground(value) {
+    const color = this.parseSourceColor(value);
+    if (!color || color.a < 0.1) return false;
+    return !(color.r > 245 && color.g > 245 && color.b > 245);
+  }
+
+  classifySourceTextColor(value) {
+    const color = this.parseSourceColor(value);
+    if (!color || color.a < 0.1) return null;
+    const { r, g, b } = color;
+
+    if (r > 140 && r > g * 1.35 && r > b * 1.35) return 'reader-source-critical';
+    if (b > 110 && b > r * 1.25 && b >= g * 1.1) return 'reader-source-info';
+    if (g > 95 && g > r * 1.2 && g > b * 1.05) return 'reader-source-positive';
+    if (r > 90 && b > 90 && r > g * 1.15 && b > g * 1.15) return 'reader-source-accent';
+    return null;
   }
 
   createOfflineList(source, tagName = 'ul') {
@@ -4105,6 +4195,7 @@ ${text}
     if (this.selectedContent) {
       contentContainer.innerHTML = '';
       contentContainer.appendChild(this.selectedContent);
+      this.applySourceHighlightVisibility();
 
       // 處理標題和建立目錄
       this.currentSection = 0;
@@ -4151,10 +4242,11 @@ ${text}
     const highlightButton = document.getElementById('reader-highlight-mode');
     if (!highlightButton) return;
 
-    highlightButton.classList.toggle('active', this.isHighlightMode);
-    highlightButton.title = this.isHighlightMode
-      ? '關閉畫重點模式'
-      : (this.isOfflineMode ? '本機畫重點模式' : 'AI畫重點模式');
+    const highlightsVisible = this.isOfflineMode ? this.showSourceHighlights : this.isHighlightMode;
+    highlightButton.classList.toggle('active', highlightsVisible);
+    highlightButton.title = this.isOfflineMode
+      ? (highlightsVisible ? '隱藏原文作者的重點' : '顯示原文作者的重點')
+      : (highlightsVisible ? '關閉 AI 畫重點模式' : 'AI畫重點模式');
     highlightButton.textContent = '✨';
     highlightButton.disabled = false;
   }
@@ -4230,18 +4322,21 @@ ${text}
 
     // 更新畫重點按鈕
     if (highlightModeBtn) {
-      highlightModeBtn.classList.toggle('active', this.isHighlightMode);
-      highlightModeBtn.title = this.isHighlightMode ? '關閉畫重點模式' : 'AI畫重點模式';
+      const highlightsVisible = this.isOfflineMode ? this.showSourceHighlights : this.isHighlightMode;
+      highlightModeBtn.classList.toggle('active', highlightsVisible);
+      highlightModeBtn.title = highlightsVisible ? '關閉 AI 畫重點模式' : 'AI畫重點模式';
     }
 
-    // 根據不同模式調整按鈕說明；離線版使用本機規則式標記。
+    // 根據不同模式調整按鈕說明；離線版只顯示原文作者既有的重點。
     if (this.isOfflineMode) {
       if (versionToggleBtn) {
         versionToggleBtn.disabled = false;
       }
       if (highlightModeBtn) {
         highlightModeBtn.disabled = false;
-        highlightModeBtn.title = this.isHighlightMode ? '關閉畫重點模式' : '本機畫重點模式';
+        highlightModeBtn.title = this.showSourceHighlights
+          ? '隱藏原文作者的重點'
+          : '顯示原文作者的重點';
       }
     } else {
       // AI模式下：所有功能都可用
@@ -4386,6 +4481,16 @@ ${text}
 
   // 重點模式切換功能（優化版：直接切換顯示）
   toggleHighlightMode() {
+    if (this.isOfflineMode) {
+      this.showSourceHighlights = !this.showSourceHighlights;
+      this.applySourceHighlightVisibility();
+      this.updateHighlightButtonState();
+      this.updateStatusDisplay();
+      this.saveSettings();
+      console.log('🔄 原文重點', this.showSourceHighlights ? '顯示' : '隱藏');
+      return;
+    }
+
     // 檢查是否有重點數據可以顯示
     if (!this.isOfflineMode &&
         (!this.highlightData || Object.keys(this.highlightData).length === 0)) {
@@ -4414,7 +4519,7 @@ ${text}
       highlightButton.classList.toggle('active', this.isHighlightMode);
       highlightButton.title = this.isHighlightMode
         ? '關閉畫重點模式'
-        : (this.isOfflineMode ? '本機畫重點模式' : 'AI畫重點模式');
+        : 'AI畫重點模式';
     }
 
     console.log('🔄 重點模式', this.isHighlightMode ? '開啟' : '關閉', '(即時切換)');
@@ -4430,14 +4535,9 @@ ${text}
     let contentToShow = null;
 
     if (this.isOfflineMode) {
-      if (this.isHighlightMode) {
-        contentToShow = this.getOfflineHighlightedContent();
-        console.log('✨ 顯示離線版 + 本機重點');
-      } else {
-        contentToShow = this.offlineFormattedContent ||
-          this.generateOfflineFormatting(this.originalSelectedText, this.originalSelectedFragment);
-        console.log('📄 顯示離線版內容');
-      }
+      contentToShow = this.offlineFormattedContent ||
+        this.generateOfflineFormatting(this.originalSelectedText, this.originalSelectedFragment);
+      console.log('📄 顯示離線版內容（保留原文作者重點）');
     } else if (this.isHighlightMode && this.highlightData) {
       // 重點模式開啟且有重點數據（僅AI模式可用）
       if (this.isSimplifiedVersion) {
@@ -4464,72 +4564,6 @@ ${text}
     }
   }
 
-  getOfflineHighlightedContent() {
-    if (this.offlineHighlightedContent) return this.offlineHighlightedContent;
-    if (!this.offlineFormattedContent) return null;
-
-    const highlighted = this.offlineFormattedContent.cloneNode(true);
-    const walker = document.createTreeWalker(
-      highlighted,
-      NodeFilter.SHOW_TEXT,
-      {
-        acceptNode: node => {
-          if (!node.textContent.trim()) return NodeFilter.FILTER_REJECT;
-          if (node.parentElement?.closest(
-            'script, style, .reader-highlight, .reader-header, .reader-attachments, a, button'
-          )) {
-            return NodeFilter.FILTER_REJECT;
-          }
-          return NodeFilter.FILTER_ACCEPT;
-        }
-      }
-    );
-
-    const textNodes = [];
-    while (walker.nextNode()) textNodes.push(walker.currentNode);
-    let marksUsed = 0;
-    const markBudget = 48;
-    for (const node of textNodes) {
-      if (marksUsed >= markBudget) break;
-      marksUsed += this.highlightOfflineTextNode(
-        node,
-        Math.min(2, markBudget - marksUsed)
-      );
-    }
-
-    this.offlineHighlightedContent = highlighted;
-    return highlighted;
-  }
-
-  highlightOfflineTextNode(textNode, maxMatches = 2) {
-    if (maxMatches <= 0) return 0;
-    const text = textNode.textContent;
-    const pattern = /((?:民國)?\d{2,4}年\d{1,2}月\d{1,2}日|\d{2,4}[\/.-]\d{1,2}[\/.-]\d{1,2}|(?:[01]?\d|2[0-3])[:：][0-5]\d|主席裁示|辦理期限|截止(?:日期)?|承辦(?:單位|人)?|決議|結論|列管|應辦|請於|務必)/g;
-    let match;
-    let cursor = 0;
-    let matchCount = 0;
-    const fragment = document.createDocumentFragment();
-
-    while (matchCount < maxMatches && (match = pattern.exec(text)) !== null) {
-      if (match.index > cursor) {
-        fragment.appendChild(document.createTextNode(text.slice(cursor, match.index)));
-      }
-      const mark = document.createElement('span');
-      mark.className = 'reader-highlight reader-local-highlight';
-      mark.textContent = match[0];
-      fragment.appendChild(mark);
-      cursor = match.index + match[0].length;
-      matchCount += 1;
-    }
-
-    if (cursor === 0) return 0;
-    if (cursor < text.length) {
-      fragment.appendChild(document.createTextNode(text.slice(cursor)));
-    }
-    textNode.replaceWith(fragment);
-    return matchCount;
-  }
-
   // 重新整理內容顯示
   refreshContent() {
     const contentContainer = document.getElementById('reader-main-content');
@@ -4537,6 +4571,7 @@ ${text}
 
     contentContainer.innerHTML = '';
     contentContainer.appendChild(this.selectedContent);
+    this.applySourceHighlightVisibility();
 
     const scroller = document.getElementById('web-reader-content');
     if (scroller) scroller.scrollTop = 0;
@@ -4546,6 +4581,15 @@ ${text}
     this.processHeaders(this.selectedContent);
     this.buildTableOfContents();
     this.updateProgress();
+  }
+
+  applySourceHighlightVisibility() {
+    const contentContainer = document.getElementById('reader-main-content');
+    if (!contentContainer) return;
+    contentContainer.classList.toggle(
+      'reader-source-highlights-hidden',
+      this.isOfflineMode && !this.showSourceHighlights
+    );
   }
 
   toggleFullscreen() {
