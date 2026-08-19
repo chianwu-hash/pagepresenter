@@ -11,6 +11,7 @@ class WebReader {
     this.selectedContent = null;
     this.originalSelectedText = null; // 保存原始選取文字
     this.originalSelectedFragment = null; // 保存選取範圍的本機 DOM（不送往 AI）
+    this.esaAttachmentSources = new Map(); // 離線附件卡片對應的 ESA 原始點擊節點
     this.lastSelectionSnapshot = null; // 右鍵選單開啟前保留選取狀態
     this.simplifiedContent = null; // AI精簡版本快取
     this.originalFormattedContent = null; // 原文排版版本快取
@@ -105,6 +106,17 @@ class WebReader {
     document.getElementById('reader-ai-process').onclick = () => this.startAIProcessing();
     document.getElementById('sidebar-toggle').onclick = () => this.toggleSidebar();
 
+    // 使用事件委派，讓離線畫重點所產生的 clone 也能開啟附件。
+    document.getElementById('reader-main-content').addEventListener('click', (event) => {
+      const attachmentButton = event.target.closest('[data-reader-attachment-id]');
+      if (!attachmentButton) return;
+      event.preventDefault();
+      this.openEsaAttachment(
+        attachmentButton.dataset.readerAttachmentId,
+        attachmentButton.dataset.readerAttachmentName || '附件'
+      );
+    });
+
     document.addEventListener('keydown', (e) => {
       if (this.isActive) {
         this.handleKeyboard(e);
@@ -160,7 +172,7 @@ class WebReader {
   }
 
   // 處理選取內容並啟動簡報模式
-  async startWithSelectedContent(selectedText, selectedFragment = null) {
+  async startWithSelectedContent(selectedText, selectedFragment = null, attachmentSources = null) {
     console.log('使用選取內容啟動簡報模式');
 
     // 保存原始選取文字
@@ -168,6 +180,9 @@ class WebReader {
     this.originalSelectedFragment = selectedFragment
       ? selectedFragment.cloneNode(true)
       : this.getSelectionFragment(selectedText);
+    this.esaAttachmentSources = attachmentSources instanceof Map
+      ? attachmentSources
+      : new Map();
     this.offlineHighlightedContent = null;
     this.simplifiedContent = null;
     this.originalFormattedContent = null;
@@ -444,6 +459,11 @@ class WebReader {
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const tag = node.tagName.toLowerCase();
 
+    if (node.matches('.meeting-card-content--file')) {
+      this.appendOfflineAttachments(node, target);
+      return;
+    }
+
     if (/^h[1-6]$/.test(tag)) {
       const level = Math.min(Number(tag.slice(1)), 3);
       const heading = document.createElement(`h${level}`);
@@ -634,6 +654,126 @@ class WebReader {
     }
 
     if (figure.children.length) target.appendChild(figure);
+  }
+
+  appendOfflineAttachments(source, target) {
+    const sourceItems = Array.from(
+      source.querySelectorAll('.meeting-card-content--file-items[data-reader-attachment-id]')
+    );
+    if (!sourceItems.length) return;
+
+    const section = document.createElement('section');
+    section.className = 'reader-attachments';
+    section.setAttribute('aria-label', `附件 ${sourceItems.length} 份`);
+
+    const heading = document.createElement('div');
+    heading.className = 'reader-attachments-heading';
+    heading.textContent = `附件（${sourceItems.length}）`;
+    section.appendChild(heading);
+
+    const list = document.createElement('div');
+    list.className = 'reader-attachments-list';
+
+    sourceItems.forEach(item => {
+      const id = item.dataset.readerAttachmentId;
+      const name = item.querySelector('.file-info--title')?.textContent.replace(/\s+/g, ' ').trim() || '未命名附件';
+      const metadata = item.querySelector('.file-info--date')?.textContent.replace(/\s+/g, ' ').trim() || '';
+      const extension = this.getAttachmentExtension(name);
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'reader-attachment-card';
+      button.dataset.readerAttachmentId = id;
+      button.dataset.readerAttachmentName = name;
+      button.title = `依 ESA 原始方式開啟附件：${name}`;
+
+      const icon = document.createElement('span');
+      icon.className = 'reader-attachment-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = this.getAttachmentIcon(extension);
+
+      const info = document.createElement('span');
+      info.className = 'reader-attachment-info';
+
+      const title = document.createElement('span');
+      title.className = 'reader-attachment-title';
+      title.textContent = name;
+      info.appendChild(title);
+
+      const detail = document.createElement('span');
+      detail.className = 'reader-attachment-meta';
+      detail.textContent = [extension ? extension.toUpperCase() : '檔案', metadata]
+        .filter(Boolean)
+        .join(' · ');
+      info.appendChild(detail);
+
+      const action = document.createElement('span');
+      action.className = 'reader-attachment-action';
+      action.textContent = '開啟';
+
+      button.appendChild(icon);
+      button.appendChild(info);
+      button.appendChild(action);
+      list.appendChild(button);
+    });
+
+    section.appendChild(list);
+    target.appendChild(section);
+  }
+
+  getAttachmentExtension(filename) {
+    const match = String(filename || '').trim().match(/\.([a-z0-9]{1,10})$/i);
+    return match ? match[1].toLowerCase() : '';
+  }
+
+  getAttachmentIcon(extension) {
+    if (extension === 'pdf') return '📕';
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(extension)) return '🖼️';
+    if (['mp4', 'webm', 'mov', 'm4v'].includes(extension)) return '🎬';
+    if (['mp3', 'wav', 'm4a', 'ogg'].includes(extension)) return '🎧';
+    if (['doc', 'docx', 'odt', 'rtf'].includes(extension)) return '📘';
+    if (['xls', 'xlsx', 'ods', 'csv'].includes(extension)) return '📊';
+    if (['ppt', 'pptx', 'odp'].includes(extension)) return '📊';
+    return '📄';
+  }
+
+  openEsaAttachment(id, name) {
+    const entry = this.esaAttachmentSources.get(id);
+    let source = entry?.source || entry;
+
+    // Angular 重新渲染會替換原始節點；以只存在本機 DOM 的附件特徵重新定位，
+    // 仍交由 ESA 原本的 ng-click 執行，不自行組下載網址。
+    if ((!source || !source.isConnected) && entry?.key) {
+      source = this.findLiveEsaAttachmentSource(entry.key);
+      if (source) this.esaAttachmentSources.set(id, { ...entry, source });
+    }
+
+    if (!source || !source.isConnected) {
+      this.showStatusNotification(`無法開啟「${name}」：ESA 原始頁面已更新，請重新啟動簡報`);
+      return;
+    }
+
+    this.showStatusNotification(`正在依 ESA 原始方式開啟「${name}」`);
+    source.click();
+  }
+
+  getEsaAttachmentStableKey(item) {
+    if (!item) return '';
+    const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
+    const title = normalize(item.querySelector('.file-info--title')?.textContent);
+    const metadata = normalize(item.querySelector('.file-info--date')?.textContent);
+    return title ? `${title}\u0000${metadata}` : '';
+  }
+
+  findLiveEsaAttachmentSource(key) {
+    if (!key) return null;
+
+    const items = Array.from(document.querySelectorAll(
+      '.meeting-card-content--file:not(.ng-hide) .meeting-card-content--file-items'
+    )).filter(item => !item.closest('#web-reader-container'));
+
+    const item = items.find(candidate => this.getEsaAttachmentStableKey(candidate) === key);
+    return item?.querySelector('[ng-click*="attach_file"]') || null;
   }
 
   createSafeOfflineImage(source) {
@@ -3731,7 +3871,11 @@ ${text}
     if (!detected) return false;
 
     console.log('使用 ESA 會議頁自動擷取內容啟動簡報模式');
-    this.startWithSelectedContent(detected.text, detected.fragment);
+    this.startWithSelectedContent(
+      detected.text,
+      detected.fragment,
+      detected.attachmentSources
+    );
     return true;
   }
 
@@ -3783,6 +3927,36 @@ ${text}
 
     const staging = document.createElement('div');
     elements.forEach(element => staging.appendChild(element.cloneNode(true)));
+    const attachmentSources = new Map();
+
+    if (sourceName === 'esa-meeting-management') {
+      const originalAttachmentItems = elements.flatMap(element =>
+        Array.from(element.querySelectorAll('.meeting-card-content--file-items'))
+      );
+      const clonedAttachmentItems = Array.from(staging.querySelectorAll(
+        '.meeting-card-content--file-items'
+      ));
+
+      const sourcesByKey = new Map();
+      originalAttachmentItems.forEach(item => {
+        const key = this.getEsaAttachmentStableKey(item);
+        const source = item.querySelector('[ng-click*="attach_file"]');
+        if (!key || !source) return;
+        const sources = sourcesByKey.get(key) || [];
+        sources.push(source);
+        sourcesByKey.set(key, sources);
+      });
+
+      clonedAttachmentItems.forEach((item, index) => {
+        const key = this.getEsaAttachmentStableKey(item);
+        const sourceTrigger = sourcesByKey.get(key)?.shift();
+        if (!sourceTrigger) return;
+        const id = `esa-attachment-${index}`;
+        item.dataset.readerAttachmentId = id;
+        attachmentSources.set(id, { source: sourceTrigger, key });
+      });
+    }
+
     staging.querySelectorAll(
       'script, style, noscript, template, form, button, input, select, textarea, ' +
       '[hidden], [aria-hidden="true"], .ng-hide, .ng-cloak, .hidden, .hidden-print, .modal, ' +
@@ -3810,7 +3984,10 @@ ${text}
       });
     }
 
-    const text = Array.from(staging.children)
+    // AI 文字只包含會議正文；附件名稱、上傳者與內部路徑不自動送出。
+    const aiTextSource = staging.cloneNode(true);
+    aiTextSource.querySelectorAll('.meeting-card-content--file').forEach(element => element.remove());
+    const text = Array.from(aiTextSource.children)
       .map(element => element.textContent.replace(/\s+/g, ' ').trim())
       .filter(Boolean)
       .join('\n\n');
@@ -3818,7 +3995,7 @@ ${text}
 
     const fragment = document.createDocumentFragment();
     while (staging.firstChild) fragment.appendChild(staging.firstChild);
-    return { text, fragment, source: sourceName };
+    return { text, fragment, source: sourceName, attachmentSources };
   }
 
   toChineseSectionNumber(value) {
@@ -3949,6 +4126,7 @@ ${text}
     document.body.classList.remove('reader-mode');
     this.isActive = false;
     this.selectedContent = null;
+    this.esaAttachmentSources.clear();
     this.saveSettings();
   }
 
@@ -4450,23 +4628,32 @@ ${text}
 
 // 監聽來自background script的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  let handled = false;
+
   if (message.action === 'startWithSelection' && message.selectedText) {
     if (window.webReader) {
       window.webReader.startWithSelectedContent(message.selectedText);
+      handled = true;
     }
   } else if (message.action === 'toggleReader') {
     if (window.webReader) {
       window.webReader.toggleReader();
+      handled = true;
     }
   } else if (message.action === 'adjustFont') {
     if (window.webReader) {
       window.webReader.adjustFontSize(message.delta);
+      handled = true;
     }
   } else if (message.action === 'toggleContrast') {
     if (window.webReader) {
       window.webReader.toggleHighContrast();
+      handled = true;
     }
   }
+
+  // 明確回覆 popup，避免動作已成功卻被 Chrome 判為 message port 提前關閉。
+  sendResponse({ ok: handled });
 });
 
 // 初始化

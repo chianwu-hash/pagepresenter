@@ -829,6 +829,102 @@ body.reader-mode {
   padding: 10px 14px !important;
 }
 
+.reader-attachments {
+  margin: 28px 0 !important;
+  padding: 20px !important;
+  border: 2px solid var(--reader-border-color) !important;
+  border-radius: 12px !important;
+  background: var(--reader-toolbar-bg) !important;
+}
+
+.reader-attachments-heading {
+  margin: 0 0 14px !important;
+  color: var(--reader-header-color) !important;
+  font-size: max(20px, calc(var(--reader-font-size) * 0.68)) !important;
+  font-weight: 700 !important;
+}
+
+.reader-attachments-list {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)) !important;
+  gap: 14px !important;
+}
+
+.reader-attachment-card {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 14px !important;
+  width: 100% !important;
+  min-height: 92px !important;
+  padding: 16px 18px !important;
+  border: 2px solid var(--reader-border-color) !important;
+  border-radius: 10px !important;
+  background: var(--reader-bg-color) !important;
+  color: var(--reader-text-color) !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease !important;
+}
+
+.reader-attachment-card:hover,
+.reader-attachment-card:focus-visible {
+  border-color: var(--reader-link-color) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.16) !important;
+  outline: none !important;
+}
+
+.reader-attachment-icon {
+  font-size: max(30px, calc(var(--reader-font-size) * 1.05)) !important;
+  line-height: 1 !important;
+}
+
+.reader-attachment-info {
+  display: flex !important;
+  min-width: 0 !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+}
+
+.reader-attachment-title {
+  color: var(--reader-header-color) !important;
+  font-size: max(18px, calc(var(--reader-font-size) * 0.62)) !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.reader-attachment-meta {
+  color: var(--reader-text-color) !important;
+  font-size: max(15px, calc(var(--reader-font-size) * 0.46)) !important;
+  line-height: 1.3 !important;
+  opacity: 0.72 !important;
+}
+
+.reader-attachment-action {
+  align-self: center !important;
+  padding: 7px 11px !important;
+  border-radius: 999px !important;
+  background: var(--reader-link-color) !important;
+  color: #fff !important;
+  font-size: max(15px, calc(var(--reader-font-size) * 0.44)) !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 760px) {
+  .reader-attachment-card {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+  }
+
+  .reader-attachment-action {
+    grid-column: 2 !important;
+    justify-self: start !important;
+  }
+}
+
 /* ============================================
    AI畫重點模式樣式
    ============================================ */
