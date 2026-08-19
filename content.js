@@ -417,12 +417,15 @@ class WebReader {
   addOfflineTableHeadings(output) {
     const wrappers = Array.from(output.querySelectorAll('.reader-table-wrapper'));
     wrappers.forEach((wrapper, index) => {
-      if (wrapper.previousElementSibling?.classList.contains('reader-header')) return;
+      if (wrapper.previousElementSibling?.matches('.reader-header, .reader-esa-subheading')) return;
 
       const table = wrapper.querySelector('table');
       if (!table) return;
-      const heading = document.createElement('h2');
-      heading.className = 'reader-header reader-h2 reader-generated-heading';
+      const isEsaBody = wrapper.dataset.readerEsaBody === 'true';
+      const heading = document.createElement(isEsaBody ? 'h3' : 'h2');
+      heading.className = isEsaBody
+        ? 'reader-h3 reader-esa-subheading reader-generated-heading'
+        : 'reader-header reader-h2 reader-generated-heading';
       heading.textContent = this.deriveOfflineTableTitle(table, index, wrappers.length);
       wrapper.before(heading);
     });
@@ -464,10 +467,30 @@ class WebReader {
       return;
     }
 
+    if (node.matches('[data-reader-esa-section-title="true"]')) {
+      const heading = document.createElement('h2');
+      heading.className = 'reader-header reader-h2 reader-esa-section-title';
+      heading.setAttribute('data-reader-esa-section-title', 'true');
+      this.appendSanitizedInline(node, heading);
+      if (heading.textContent.trim()) target.appendChild(heading);
+      return;
+    }
+
+    if (node.matches('[data-reader-esa-subheading="true"]')) {
+      const heading = document.createElement('h3');
+      heading.className = 'reader-h3 reader-esa-subheading';
+      this.appendSanitizedInline(node, heading);
+      if (heading.textContent.trim()) target.appendChild(heading);
+      return;
+    }
+
     if (/^h[1-6]$/.test(tag)) {
-      const level = Math.min(Number(tag.slice(1)), 3);
+      const isEsaBody = this.isInsideEsaReportCard(node);
+      const level = isEsaBody ? 3 : Math.min(Number(tag.slice(1)), 3);
       const heading = document.createElement(`h${level}`);
-      heading.className = `reader-header reader-h${level}`;
+      heading.className = isEsaBody
+        ? 'reader-h3 reader-esa-subheading'
+        : `reader-header reader-h${level}`;
       this.appendSanitizedInline(node, heading);
       if (heading.textContent.trim()) target.appendChild(heading);
       return;
@@ -478,6 +501,7 @@ class WebReader {
       if (table) {
         const wrapper = document.createElement('div');
         wrapper.className = 'reader-table-wrapper';
+        if (this.isInsideEsaReportCard(node)) wrapper.dataset.readerEsaBody = 'true';
         wrapper.appendChild(table);
         target.appendChild(wrapper);
       }
@@ -528,7 +552,8 @@ class WebReader {
     const text = paragraph.textContent.replace(/\s+/g, ' ').trim();
     if (text.length < 2 && !paragraph.querySelector('a, img')) return;
 
-    if (this.isConservativeOfflineHeader(text)) {
+    const isEsaBody = this.isInsideEsaReportCard(source);
+    if (!isEsaBody && this.isConservativeOfflineHeader(text)) {
       const heading = document.createElement('h2');
       heading.className = 'reader-header reader-h2';
       while (paragraph.firstChild) heading.appendChild(paragraph.firstChild);
@@ -537,6 +562,11 @@ class WebReader {
     }
 
     target.appendChild(paragraph);
+  }
+
+  isInsideEsaReportCard(node) {
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    return Boolean(element?.closest('[data-reader-esa-report-card="true"]'));
   }
 
   appendSanitizedInline(source, target) {
@@ -3970,17 +4000,35 @@ ${text}
         '.meeting-card--green, .meeting-card--teal, .meeting-card--blue, .meeting-card--purple'
       ).forEach(element => element.remove());
 
-      // 各處室在 ESA 內部都可能將自己的第一項寫成「一、」；合併為整場
-      // 會議簡報後必須重新連續編號，否則目錄與內文會全部顯示「一、」。
-      Array.from(staging.querySelectorAll('.meeting-card-content--title')).forEach((title, index) => {
-        const original = title.textContent.replace(/\s+/g, ' ').trim();
-        const withoutNumber = original
-          .replace(/^\s*(?:[一二三四五六七八九十百零]+|\d+)[、．.)）]\s*/, '')
-          .trim();
-        if (!withoutNumber) return;
+      const removeNumber = value => String(value || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/^\s*(?:(?:[一二三四五六七八九十百零]+|\d+)[、．.)）]|\d+\.\d+)\s*/, '')
+        .trim();
 
-        title.textContent = `${this.toChineseSectionNumber(index + 1)}、${withoutNumber}`;
-        title.setAttribute('data-reader-esa-section-title', 'true');
+      // 黃色報告卡的外層標題才是主章節；卡內每一筆報告是次級小標。
+      // 這可避免教師週會一張處室卡有多筆報告時，全部擠進同層目錄。
+      const reportCards = Array.from(staging.querySelectorAll('.meeting-card'))
+        .filter(card => card.querySelector('.meeting-card-content--title'));
+
+      reportCards.forEach((card, sectionIndex) => {
+        card.setAttribute('data-reader-esa-report-card', 'true');
+
+        const cardTitle = Array.from(card.children)
+          .find(child => child.matches('.meeting-card-title'));
+        const sectionName = removeNumber(cardTitle?.textContent);
+        if (cardTitle && sectionName) {
+          cardTitle.textContent = `${this.toChineseSectionNumber(sectionIndex + 1)}、${sectionName}`;
+          cardTitle.setAttribute('data-reader-esa-section-title', 'true');
+        }
+
+        Array.from(card.querySelectorAll('.meeting-card-content--title')).forEach((title, itemIndex) => {
+          const itemName = removeNumber(title.textContent);
+          if (!itemName) return;
+          title.textContent = `${sectionIndex + 1}.${itemIndex + 1} ${itemName}`;
+          title.setAttribute('data-reader-esa-subheading', 'true');
+          title.removeAttribute('data-reader-esa-section-title');
+        });
       });
     }
 
@@ -4427,7 +4475,9 @@ ${text}
       {
         acceptNode: node => {
           if (!node.textContent.trim()) return NodeFilter.FILTER_REJECT;
-          if (node.parentElement?.closest('script, style, .reader-highlight')) {
+          if (node.parentElement?.closest(
+            'script, style, .reader-highlight, .reader-header, .reader-attachments, a, button'
+          )) {
             return NodeFilter.FILTER_REJECT;
           }
           return NodeFilter.FILTER_ACCEPT;
@@ -4437,20 +4487,30 @@ ${text}
 
     const textNodes = [];
     while (walker.nextNode()) textNodes.push(walker.currentNode);
-    textNodes.forEach(node => this.highlightOfflineTextNode(node));
+    let marksUsed = 0;
+    const markBudget = 48;
+    for (const node of textNodes) {
+      if (marksUsed >= markBudget) break;
+      marksUsed += this.highlightOfflineTextNode(
+        node,
+        Math.min(2, markBudget - marksUsed)
+      );
+    }
 
     this.offlineHighlightedContent = highlighted;
     return highlighted;
   }
 
-  highlightOfflineTextNode(textNode) {
+  highlightOfflineTextNode(textNode, maxMatches = 2) {
+    if (maxMatches <= 0) return 0;
     const text = textNode.textContent;
-    const pattern = /((?:民國)?\d{2,4}年\d{1,2}月\d{1,2}日|\d{2,4}[\/.-]\d{1,2}[\/.-]\d{1,2}|(?:[01]?\d|2[0-3])[:：][0-5]\d|決議|結論|主席裁示|承辦(?:單位|人)?|辦理期限|期限|截止|列管|應辦|請於|務必|完成|延期|取消|注意事項|附件)/g;
+    const pattern = /((?:民國)?\d{2,4}年\d{1,2}月\d{1,2}日|\d{2,4}[\/.-]\d{1,2}[\/.-]\d{1,2}|(?:[01]?\d|2[0-3])[:：][0-5]\d|主席裁示|辦理期限|截止(?:日期)?|承辦(?:單位|人)?|決議|結論|列管|應辦|請於|務必)/g;
     let match;
     let cursor = 0;
+    let matchCount = 0;
     const fragment = document.createDocumentFragment();
 
-    while ((match = pattern.exec(text)) !== null) {
+    while (matchCount < maxMatches && (match = pattern.exec(text)) !== null) {
       if (match.index > cursor) {
         fragment.appendChild(document.createTextNode(text.slice(cursor, match.index)));
       }
@@ -4459,13 +4519,15 @@ ${text}
       mark.textContent = match[0];
       fragment.appendChild(mark);
       cursor = match.index + match[0].length;
+      matchCount += 1;
     }
 
-    if (cursor === 0) return;
+    if (cursor === 0) return 0;
     if (cursor < text.length) {
       fragment.appendChild(document.createTextNode(text.slice(cursor)));
     }
     textNode.replaceWith(fragment);
+    return matchCount;
   }
 
   // 重新整理內容顯示

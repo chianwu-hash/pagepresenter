@@ -459,6 +459,15 @@ body.reader-mode {
   color: var(--reader-header-color) !important;
 }
 
+.reader-esa-subheading {
+  margin: 26px 0 12px !important;
+  padding: 8px 0 8px 16px !important;
+  border-left: 5px solid var(--reader-border-color) !important;
+  font-size: calc(var(--reader-font-size) * 1.06) !important;
+  line-height: 1.45 !important;
+  color: var(--reader-header-color) !important;
+}
+
 .reader-h4, .reader-h5, .reader-h6 {
   font-size: calc(var(--reader-font-size) * 1.1) !important;
   font-weight: bold !important;
