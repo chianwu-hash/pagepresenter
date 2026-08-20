@@ -1,0 +1,16 @@
+{
+  "name": "pagepresenter",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check popup.js && node --check content.js && node --check background.js",
+    "build:extension": "node scripts/build-extension.mjs",
+    "publish:cws:upload": "node scripts/publish-chrome-web-store.mjs upload",
+    "publish:cws:submit": "node scripts/publish-chrome-web-store.mjs submit"
+  },
+  "devDependencies": {
+    "archiver": "^7.0.1"
+  }
+}
+
