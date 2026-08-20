@@ -420,7 +420,11 @@ class PopupController {
   updateStatusText(settings, apiInfo) {
     if (settings.isActive) {
       const modes = [];
-      if (settings.isHighContrast) modes.push('高對比');
+      if (settings.readerTheme === 'soft') {
+        modes.push('柔和紙色');
+      } else if (settings.readerTheme === 'high-contrast' || settings.isHighContrast) {
+        modes.push('高對比');
+      }
       if (settings.isFocusMode) modes.push('聚焦');
 
       const modeText = modes.length > 0 ? ` (${modes.join(', ')})` : '';

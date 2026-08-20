@@ -5,6 +5,7 @@ class WebReader {
     this.originalContent = null;
     this.fontSize = 32;
     this.isHighContrast = false;
+    this.readerTheme = 'formal';
     this.isSidebarCollapsed = false;
     this.currentSection = 0;
     this.sections = [];
@@ -60,7 +61,12 @@ class WebReader {
             <button id="reader-font-decrease" class="toolbar-button" title="縮小字體" aria-label="縮小字體">A−</button>
             <span id="reader-font-size" aria-live="polite">${this.fontSize}px</span>
             <button id="reader-font-increase" class="toolbar-button" title="放大字體" aria-label="放大字體">A＋</button>
-            <button id="reader-contrast" class="toolbar-button" title="高對比模式" aria-label="高對比模式">對比</button>
+            <label class="toolbar-label toolbar-theme-label" for="reader-theme-select">主題</label>
+            <select id="reader-theme-select" class="toolbar-select" title="選擇閱讀主題" aria-label="選擇閱讀主題">
+              <option value="formal">正式白</option>
+              <option value="soft">柔和紙色</option>
+              <option value="high-contrast">高對比</option>
+            </select>
           </div>
           <div class="toolbar-divider" aria-hidden="true"></div>
           <div class="toolbar-group toolbar-group-mode" aria-label="內容模式">
@@ -109,7 +115,7 @@ class WebReader {
     document.getElementById('reader-fullscreen').onclick = () => this.toggleFullscreen();
     document.getElementById('reader-font-increase').onclick = () => this.adjustFontSize(4);
     document.getElementById('reader-font-decrease').onclick = () => this.adjustFontSize(-4);
-    document.getElementById('reader-contrast').onclick = () => this.toggleHighContrast();
+    document.getElementById('reader-theme-select').onchange = (e) => this.setReaderTheme(e.target.value);
     document.getElementById('reader-version-toggle').onclick = (e) => {
       if (e.target.disabled) return;
       this.toggleVersion();
@@ -4782,6 +4788,7 @@ ${text}
     const container = document.getElementById('web-reader-container');
     container.classList.remove('web-reader-hidden');
     container.classList.add('web-reader-active');
+    this.applyReaderTheme();
 
     const contentContainer = document.getElementById('reader-main-content');
     contentContainer.innerHTML = `
@@ -4810,6 +4817,7 @@ ${text}
     const container = document.getElementById('web-reader-container');
     container.classList.remove('web-reader-hidden');
     container.classList.add('web-reader-active');
+    this.applyReaderTheme();
 
     // 使用選取的內容
     if (this.selectedContent) {
@@ -4867,7 +4875,7 @@ ${text}
     highlightButton.title = this.isOfflineMode
       ? (highlightsVisible ? '隱藏原文作者的重點' : '顯示原文作者的重點')
       : (highlightsVisible ? '關閉 AI 畫重點模式' : 'AI畫重點模式');
-    highlightButton.textContent = '✨';
+    highlightButton.textContent = highlightsVisible ? '重點開' : '重點關';
     highlightButton.disabled = false;
   }
 
@@ -5103,9 +5111,19 @@ ${text}
 
     // 更新版本切換按鈕
     if (versionToggleBtn) {
-      versionToggleBtn.title = this.isSimplifiedVersion ? '當前：精簡版 (點擊切換到原文版)' : '當前：原文版 (點擊切換到精簡版)';
-      versionToggleBtn.textContent = this.isSimplifiedVersion ? '精簡版' : '原文版';
-      versionToggleBtn.classList.toggle('active', !this.isSimplifiedVersion);
+      if (this.isOfflineMode) {
+        versionToggleBtn.title = '當前：離線版 (點擊切換到 AI 版本)';
+        versionToggleBtn.textContent = '離線版';
+        versionToggleBtn.classList.remove('active');
+      } else if (this.isSimplifiedVersion) {
+        versionToggleBtn.title = '當前：AI 精簡版 (點擊切換版本)';
+        versionToggleBtn.textContent = 'AI 精簡';
+        versionToggleBtn.classList.add('active');
+      } else {
+        versionToggleBtn.title = '當前：AI 原文版 (點擊切換版本)';
+        versionToggleBtn.textContent = 'AI 原文';
+        versionToggleBtn.classList.add('active');
+      }
     }
 
     // 更新畫重點按鈕
@@ -5113,7 +5131,9 @@ ${text}
       const highlightsVisible = this.isOfflineMode ? this.showSourceHighlights : this.isHighlightMode;
       highlightModeBtn.classList.toggle('active', highlightsVisible);
       highlightModeBtn.textContent = highlightsVisible ? '重點開' : '重點關';
-      highlightModeBtn.title = highlightsVisible ? '關閉 AI 畫重點模式' : 'AI畫重點模式';
+      highlightModeBtn.title = this.isOfflineMode
+        ? (highlightsVisible ? '隱藏原文作者的重點' : '顯示原文作者的重點')
+        : (highlightsVisible ? '關閉畫重點模式' : 'AI畫重點模式');
     }
 
     // 根據不同模式調整按鈕說明；離線版只顯示原文作者既有的重點。
@@ -5221,11 +5241,36 @@ ${text}
     this.saveSettings();
   }
 
-  toggleHighContrast() {
-    this.isHighContrast = !this.isHighContrast;
+  normalizeReaderTheme(theme) {
+    return ['formal', 'soft', 'high-contrast'].includes(theme) ? theme : 'formal';
+  }
+
+  applyReaderTheme(theme = this.readerTheme) {
+    this.readerTheme = this.normalizeReaderTheme(theme);
+    this.isHighContrast = this.readerTheme === 'high-contrast';
+
     const container = document.getElementById('web-reader-container');
-    container.classList.toggle('high-contrast', this.isHighContrast);
+    if (container) {
+      container.classList.remove('theme-formal', 'theme-soft', 'theme-high-contrast', 'high-contrast');
+      container.classList.add(`theme-${this.readerTheme}`);
+      container.classList.toggle('high-contrast', this.isHighContrast);
+      container.style.color = 'var(--reader-text-color)';
+      container.style.background = 'var(--reader-bg-color)';
+    }
+
+    const themeSelect = document.getElementById('reader-theme-select');
+    if (themeSelect) {
+      themeSelect.value = this.readerTheme;
+    }
+  }
+
+  setReaderTheme(theme) {
+    this.applyReaderTheme(theme);
     this.saveSettings();
+  }
+
+  toggleHighContrast() {
+    this.setReaderTheme(this.isHighContrast ? 'formal' : 'high-contrast');
   }
 
 
@@ -5279,15 +5324,15 @@ ${text}
     if (!versionButton) return;
 
     if (this.isOfflineMode) {
-      versionButton.textContent = '📄';
+      versionButton.textContent = '離線版';
       versionButton.title = '當前：離線版 (點擊切換到AI版本)';
       versionButton.classList.remove('active');
     } else if (this.isSimplifiedVersion) {
-      versionButton.textContent = '📋';
+      versionButton.textContent = 'AI 精簡';
       versionButton.title = '當前：AI精簡版 (點擊切換版本)';
       versionButton.classList.add('active');
     } else {
-      versionButton.textContent = '📖';
+      versionButton.textContent = 'AI 原文';
       versionButton.title = '當前：AI原文版 (點擊切換版本)';
       versionButton.classList.add('active');
     }
@@ -5319,7 +5364,7 @@ ${text}
 
         setTimeout(() => {
           highlightButton.title = originalTitle;
-          highlightButton.textContent = '✨';
+          this.updateHighlightButtonState();
         }, 2000);
       }
       return;
@@ -5402,6 +5447,7 @@ ${text}
       isActive: this.isActive,
       fontSize: this.fontSize,
       isHighContrast: this.isHighContrast,
+      readerTheme: this.readerTheme,
       isFocusMode: this.isFocusMode || false,
       isSidebarCollapsed: this.isSidebarCollapsed,
       isSimplifiedVersion: this.isSimplifiedVersion,
@@ -5538,6 +5584,7 @@ ${text}
     const settings = {
       fontSize: this.fontSize,
       isHighContrast: this.isHighContrast,
+      readerTheme: this.readerTheme,
       isSidebarCollapsed: this.isSidebarCollapsed,
       isActive: this.isActive,
       isSimplifiedVersion: this.isSimplifiedVersion,
@@ -5552,13 +5599,17 @@ ${text}
       if (result.webReaderSettings) {
         const settings = result.webReaderSettings;
         this.fontSize = settings.fontSize || 32;
-        this.isHighContrast = settings.isHighContrast || false;
+        this.readerTheme = this.normalizeReaderTheme(
+          settings.readerTheme || (settings.isHighContrast ? 'high-contrast' : 'formal')
+        );
+        this.isHighContrast = this.readerTheme === 'high-contrast';
         this.isSidebarCollapsed = settings.isSidebarCollapsed || false;
         this.isSimplifiedVersion = settings.isSimplifiedVersion !== undefined ? settings.isSimplifiedVersion : true;
         // 重點模式不恢復，因為重點數據不會被保存，每次都需要重新處理
         this.isHighlightMode = false;
 
         document.documentElement.style.setProperty('--reader-font-size', `${this.fontSize}px`);
+        this.applyReaderTheme();
 
         // 不自動恢復active狀態，需要手動啟動
         // 注意：不恢復 isHighlightMode 狀態，因為重點數據不會被保存
