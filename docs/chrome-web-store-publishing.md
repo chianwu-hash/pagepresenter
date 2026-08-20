@@ -10,6 +10,14 @@
 2. `npm run publish:cws:upload` 上傳為草稿，不送審
 3. `npm run publish:cws:submit` 上傳並送審
 
+## 目前送審紀錄
+
+- Extension ID：`kgacimdkdafablinkggjoopjgejincic`
+- 版本：`1.1.0`
+- 狀態：已於 Chrome Web Store Developer Dashboard 提交審查
+- Repo visibility：Public
+- 隱私權政策網址：`https://raw.githubusercontent.com/chianwu-hash/pagepresenter/main/PRIVACY.md`
+
 ## 第一次上架
 
 1. 到 Chrome Web Store Developer Dashboard。
