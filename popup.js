@@ -16,6 +16,9 @@ class PopupController {
     this.contrastButton = document.getElementById('highContrast');
     this.focusButton = document.getElementById('focusMode');
     this.statusElement = document.getElementById('currentStatus');
+    this.geminiStatusSummary = document.getElementById('geminiStatusSummary');
+    this.openaiStatusSummary = document.getElementById('openaiStatusSummary');
+    this.priorityStatusSummary = document.getElementById('priorityStatusSummary');
 
     // API設定元素
     this.apiToggle = document.getElementById('apiToggle');
@@ -70,12 +73,45 @@ class PopupController {
     }
   }
 
+  getDefaultOpenaiModel() {
+    return 'gpt-5.6-luna';
+  }
+
+  normalizeOpenaiModel(model) {
+    const supportedModels = ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol'];
+    return supportedModels.includes(model) ? model : this.getDefaultOpenaiModel();
+  }
+
+  extractOpenaiResponseText(data) {
+    if (typeof data?.output_text === 'string') {
+      return data.output_text;
+    }
+
+    const textParts = [];
+    for (const item of data?.output || []) {
+      for (const content of item?.content || []) {
+        if (typeof content?.text === 'string') {
+          textParts.push(content.text);
+        }
+      }
+    }
+    return textParts.join('\n').trim();
+  }
+
   bindEvents() {
     this.toggleButton.onclick = () => this.toggleReader();
-    this.fontIncreaseButton.onclick = () => this.adjustFont(4);
-    this.fontDecreaseButton.onclick = () => this.adjustFont(-4);
-    this.contrastButton.onclick = () => this.toggleContrast();
-    this.focusButton.onclick = () => this.toggleFocus();
+    if (this.fontIncreaseButton) {
+      this.fontIncreaseButton.onclick = () => this.adjustFont(4);
+    }
+    if (this.fontDecreaseButton) {
+      this.fontDecreaseButton.onclick = () => this.adjustFont(-4);
+    }
+    if (this.contrastButton) {
+      this.contrastButton.onclick = () => this.toggleContrast();
+    }
+    if (this.focusButton) {
+      this.focusButton.onclick = () => this.toggleFocus();
+    }
 
     // API設定事件
     if (this.apiToggle) {
@@ -378,7 +414,7 @@ class PopupController {
       const apiInfo = {
         hasOpenAI: !!(result.openaiAPIKey && result.openaiAPIKey.length > 0),
         hasGemini: !!(result.geminiAPIKey && result.geminiAPIKey.length > 0),
-        openaiModel: result.openaiModel || 'gpt-4o-mini'
+        openaiModel: this.normalizeOpenaiModel(result.openaiModel)
       };
 
       this.applyStatus(settings, apiInfo);
@@ -402,6 +438,10 @@ class PopupController {
   }
 
   updateControlButtons(settings) {
+    if (!this.fontIncreaseButton || !this.fontDecreaseButton || !this.contrastButton || !this.focusButton) {
+      return;
+    }
+
     this.contrastButton.classList.toggle('active', settings.isHighContrast);
     this.focusButton.classList.toggle('active', settings.isFocusMode);
 
@@ -628,16 +668,15 @@ class PopupController {
 
   // 更新API狀態顯示
   updateApiStatus() {
-    chrome.storage.local.get(['geminiAPIKey'], (result) => {
+    chrome.storage.local.get(['geminiAPIKey', 'geminiModel'], (result) => {
       const hasApiKey = !!(result.geminiAPIKey);
-      const titleSpan = document.querySelector('.api-title span');
+      const model = result.geminiModel || 'gemini-3.5-flash';
 
-      if (hasApiKey) {
-        titleSpan.textContent = 'Google Gemini AI 排版增強 (免費) ✓';
-        titleSpan.style.color = '#155724';
-      } else {
-        titleSpan.textContent = 'Google Gemini AI 排版增強 (免費)';
-        titleSpan.style.color = '#856404';
+      if (this.geminiStatusSummary) {
+        this.geminiStatusSummary.textContent = hasApiKey
+          ? `已設定 · ${model}`
+          : `未設定 · 預設 ${model}`;
+        this.geminiStatusSummary.style.color = hasApiKey ? '#168456' : '#667085';
       }
     });
   }
@@ -688,6 +727,7 @@ class PopupController {
 
         console.log('✅ 模型選擇儲存成功:', selectedModel);
         this.showApiSuccess('模型設定已儲存: ' + selectedModel);
+        this.updateApiStatus();
 
         // 立即驗證儲存結果
         setTimeout(() => {
@@ -803,7 +843,9 @@ class PopupController {
     }
 
     // 取得選擇的模型
-    const selectedModel = this.openaiModel ? this.openaiModel.value : 'gpt-4o-mini';
+    const selectedModel = this.openaiModel
+      ? this.normalizeOpenaiModel(this.openaiModel.value)
+      : this.getDefaultOpenaiModel();
 
     console.log('📝 即將儲存的OpenAI設定:');
     console.log('  - API金鑰長度:', apiKey ? apiKey.length : 0);
@@ -873,7 +915,9 @@ class PopupController {
     console.log('✅ API 金鑰格式驗證通過');
 
     // 取得選擇的模型
-    const selectedModel = this.openaiModel ? this.openaiModel.value : 'gpt-4o-mini';
+    const selectedModel = this.openaiModel
+      ? this.normalizeOpenaiModel(this.openaiModel.value)
+      : this.getDefaultOpenaiModel();
 
     // 顯示測試狀態
     this.testOpenaiApiKey.textContent = '測試中...';
@@ -882,7 +926,7 @@ class PopupController {
     try {
       console.log('發送測試請求到 OpenAI API');
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -890,13 +934,13 @@ class PopupController {
         },
         body: JSON.stringify({
           model: selectedModel,
-          messages: [
+          input: [
             {
               role: 'user',
               content: 'Hello! This is a test message. Please respond with "API test successful".'
             }
           ],
-          max_tokens: 50
+          max_output_tokens: 80
         })
       });
 
@@ -904,8 +948,14 @@ class PopupController {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('API測試成功:', data);
-        this.showApiSuccess(`✅ OpenAI API測試成功！模型: ${selectedModel}`);
+        const outputText = this.extractOpenaiResponseText(data);
+        if (outputText) {
+          console.log('API測試成功:', data);
+          this.showApiSuccess(`✅ OpenAI API測試成功！模型: ${selectedModel}`);
+        } else {
+          console.error('API回應格式錯誤:', data);
+          this.showError('❌ API回應格式錯誤');
+        }
       } else {
         const errorData = await response.json();
         console.error('API回應錯誤:', errorData);
@@ -950,13 +1000,14 @@ class PopupController {
 
       console.log('OpenAI模型選擇儲存成功');
       this.showApiSuccess(`✅ OpenAI模型已設定為: ${selectedModel}`);
+      this.loadOpenaiApiSettings();
     });
   }
 
   loadOpenaiApiSettings() {
     chrome.storage.local.get(['openaiAPIKey', 'openaiModel'], (result) => {
       const apiKey = result.openaiAPIKey || '';
-      const selectedModel = result.openaiModel || 'gpt-4o-mini';
+      const selectedModel = this.normalizeOpenaiModel(result.openaiModel);
 
       console.log('📥 載入的OpenAI設定:');
       console.log('  - API金鑰存在:', !!apiKey);
@@ -981,6 +1032,17 @@ class PopupController {
         console.log('✅ OpenAI模型選擇器已設定為:', selectedModel);
       } else {
         console.warn('⚠️ openaiModel 元素不存在，無法更新模型選擇');
+      }
+
+      if (this.openaiStatusSummary) {
+        this.openaiStatusSummary.textContent = apiKey
+          ? `已設定 · ${selectedModel}`
+          : `未設定 · 預設 ${selectedModel}`;
+        this.openaiStatusSummary.style.color = apiKey ? '#168456' : '#667085';
+      }
+
+      if (result.openaiModel && result.openaiModel !== selectedModel) {
+        chrome.storage.local.set({ openaiModel: selectedModel });
       }
     });
   }
@@ -1047,6 +1109,8 @@ class PopupController {
         this.sortableModelList.appendChild(listItem);
       }
     });
+
+    this.updatePrioritySummary(priority);
   }
 
   initSortableList() {
@@ -1123,6 +1187,7 @@ class PopupController {
   savePriorityOrder() {
     const items = this.sortableModelList.querySelectorAll('.sortable-item');
     const newPriority = Array.from(items).map(item => item.dataset.model);
+    this.updatePrioritySummary(newPriority);
 
     chrome.storage.local.set({ modelPriority: newPriority }, () => {
       if (chrome.runtime.lastError) {
@@ -1131,6 +1196,19 @@ class PopupController {
         console.log('模型優先順序已儲存:', newPriority);
       }
     });
+  }
+
+  updatePrioritySummary(priority) {
+    if (!this.priorityStatusSummary) return;
+
+    const displayNames = {
+      gemini: 'Gemini',
+      openai: 'OpenAI',
+      manual: '離線'
+    };
+    this.priorityStatusSummary.textContent = priority
+      .map(modelKey => displayNames[modelKey] || modelKey)
+      .join(' → ');
   }
 
   resetModelPriority() {

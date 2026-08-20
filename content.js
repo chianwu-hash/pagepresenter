@@ -21,7 +21,7 @@ class WebReader {
     this.offlineFormattedContent = null; // 離線排版版本快取
     this.isSimplifiedVersion = true; // 當前版本狀態：true=精簡版, false=原文版
     this.isOfflineMode = false; // 是否為離線模式
-    this.showSourceHighlights = true; // 離線版預設保留並顯示原文作者的重點
+    this.showSourceHighlights = false; // 離線版不提供重點切換，AI 版才顯示 AI 重點
     this.isHighlightMode = false; // 畫重點模式狀態
     this.highlightData = null; // AI畫重點數據快取
     this.simplifiedHighlighted = null; // 精簡版重點標記內容
@@ -73,9 +73,9 @@ class WebReader {
           <div class="toolbar-divider" aria-hidden="true"></div>
           <div class="toolbar-group toolbar-group-mode" aria-label="內容模式">
             <button id="reader-version-toggle" class="toolbar-button toolbar-mode-button" title="切換版本 (精簡版/原文版)">版本</button>
-            <button id="reader-highlight-mode" class="toolbar-button toolbar-mode-button" title="顯示或隱藏原文重點">重點</button>
+            <button id="reader-highlight-mode" class="toolbar-button toolbar-mode-button" title="AI畫重點模式">重點</button>
           </div>
-          <div class="toolbar-divider" aria-hidden="true"></div>
+          <div class="toolbar-divider toolbar-ai-divider" aria-hidden="true"></div>
           <div class="toolbar-group toolbar-group-ai" aria-label="AI 功能">
             <button id="reader-ai-process" class="toolbar-button toolbar-ai-button" title="送給 AI 處理">AI 處理</button>
           </div>
@@ -229,6 +229,8 @@ class WebReader {
     this.highlightData = null;
     this.isAIProcessing = false;
     this.aiProcessingStarted = false;
+    this.showSourceHighlights = false;
+    this.isHighlightMode = false;
     this.offlineTocSkeleton = [];
 
     // 新的分階段處理流程
@@ -270,7 +272,7 @@ class WebReader {
     // 在建立工具列狀態前先進入離線模式，避免短暫顯示 AI 按鈕說明。
     this.isOfflineMode = true;
     this.isSimplifiedVersion = false;
-    this.showSourceHighlights = true;
+    this.showSourceHighlights = false;
     this.currentFormatMode = 'Manual';
 
     // 先啟動讀者模式顯示離線內容
@@ -367,6 +369,8 @@ class WebReader {
       !!this.originalSelectedText &&
       (!this.simplifiedContent || this.isAIProcessing);
     button.classList.toggle('reader-control-hidden', !shouldShow);
+    button.closest('.toolbar-group-ai')?.classList.toggle('reader-control-hidden', !shouldShow);
+    document.querySelector('.toolbar-ai-divider')?.classList.toggle('reader-control-hidden', !shouldShow);
     button.disabled = this.isAIProcessing || this.aiProcessingStarted;
     button.textContent = this.isAIProcessing ? 'AI 處理中' : 'AI 處理';
     button.title = this.isAIProcessing
@@ -390,7 +394,7 @@ class WebReader {
     const highlightsVisible = this.isOfflineMode ? this.showSourceHighlights : this.isHighlightMode;
     if (highlightStatus) {
       highlightStatus.textContent = this.isOfflineMode
-        ? `原文重點: ${highlightsVisible ? '顯示' : '隱藏'}`
+        ? '重點: 不可用'
         : `AI重點: ${highlightsVisible ? '開' : '關'}`;
     }
 
@@ -2896,9 +2900,67 @@ class WebReader {
   async getOpenaiModel() {
     return new Promise((resolve) => {
       chrome.storage.local.get(['openaiModel'], (result) => {
-        resolve(result.openaiModel || 'gpt-4o-mini');
+        const selectedModel = this.normalizeOpenaiModel(result.openaiModel);
+        if (result.openaiModel && result.openaiModel !== selectedModel) {
+          chrome.storage.local.set({ openaiModel: selectedModel });
+        }
+        resolve(selectedModel);
       });
     });
+  }
+
+  getDefaultOpenaiModel() {
+    return 'gpt-5.6-luna';
+  }
+
+  normalizeOpenaiModel(model) {
+    const supportedModels = ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol'];
+    return supportedModels.includes(model) ? model : this.getDefaultOpenaiModel();
+  }
+
+  extractOpenaiResponseText(data) {
+    if (typeof data?.output_text === 'string') {
+      return data.output_text;
+    }
+
+    const textParts = [];
+    for (const item of data?.output || []) {
+      for (const content of item?.content || []) {
+        if (typeof content?.text === 'string') {
+          textParts.push(content.text);
+        }
+      }
+    }
+    return textParts.join('\n').trim();
+  }
+
+  async callOpenAIResponsesAPI({ apiKey, model, input, maxOutputTokens = 8000, errorPrefix = 'OpenAI API 錯誤' }) {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        input,
+        max_output_tokens: maxOutputTokens
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`${errorPrefix}: ${response.status} - ${errorData}`);
+    }
+
+    const data = await response.json();
+    const outputText = this.extractOpenaiResponseText(data);
+
+    if (!outputText) {
+      throw new Error('OpenAI API 回應格式錯誤');
+    }
+
+    return outputText;
   }
 
   async processWithOpenAI(text) {
@@ -2966,36 +3028,16 @@ ${text}`;
 ${text}`;
     }
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: selectedModel,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 8000,
-        temperature: 0.1
-      })
+    const processedContent = await this.callOpenAIResponsesAPI({
+      apiKey,
+      model: selectedModel,
+      input: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
     });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`OpenAI API 錯誤: ${response.status} - ${errorData.error?.message || '未知錯誤'}`);
-    }
-
-    const data = await response.json();
-    const processedContent = data.choices[0]?.message?.content;
-
-    if (!processedContent) {
-      throw new Error('OpenAI API 回應格式錯誤');
-    }
 
     console.log('✅ OpenAI處理完成，輸出長度:', processedContent.length);
 
@@ -3062,36 +3104,16 @@ ${text}`;
 ${text}`;
     }
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: selectedModel,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 8000,
-        temperature: 0.1
-      })
+    const processedContent = await this.callOpenAIResponsesAPI({
+      apiKey,
+      model: selectedModel,
+      input: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
     });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`OpenAI API 錯誤: ${response.status} - ${errorData.error?.message || '未知錯誤'}`);
-    }
-
-    const data = await response.json();
-    const processedContent = data.choices[0]?.message?.content;
-
-    if (!processedContent) {
-      throw new Error('OpenAI API 回應格式錯誤');
-    }
 
     console.log('✅ OpenAI重點模式處理完成，輸出長度:', processedContent.length);
     return processedContent;
@@ -3290,72 +3312,41 @@ ${text}`;
       ? `請將以下內容重新整理為簡潔的重點摘要格式，保持重要資訊，使用 Markdown 格式：\n\n${text}`
       : `請將以下內容重新排版為適合大螢幕閱讀的格式，保持完整內容，使用 Markdown 格式：\n\n${text}`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一個專業的文件編輯助手，專門負責將內容格式化為適合大螢幕展示的格式。使用清晰的標題層級和條列式結構。'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 8000,
-        temperature: 0.1
-      })
+    return await this.callOpenAIResponsesAPI({
+      apiKey,
+      model,
+      input: [
+        {
+          role: 'system',
+          content: '你是一個專業的文件編輯助手，專門負責將內容格式化為適合大螢幕展示的格式。使用清晰的標題層級和條列式結構。'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
     });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`OpenAI API 錯誤: ${response.status} - ${errorData}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
   }
 
   // OpenAI 重點模式 API 調用
   async callOpenAIHighlightAPI(text, apiKey, model, isSimplified) {
     const prompt = `請分析以下內容並標註重點資訊，使用 ==重點內容== 的格式標記重要資訊：\n\n${text}`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一個專業的重點標記助手。請標記文件中的關鍵資訊，包括日期、金額、人名、重要事件等。'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 8000,
-        temperature: 0.1
-      })
+    return await this.callOpenAIResponsesAPI({
+      apiKey,
+      model,
+      input: [
+        {
+          role: 'system',
+          content: '你是一個專業的重點標記助手。請標記文件中的關鍵資訊，包括日期、金額、人名、重要事件等。'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      errorPrefix: 'OpenAI 重點模式 API 錯誤'
     });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`OpenAI 重點模式 API 錯誤: ${response.status} - ${errorData}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
   }
 
 
@@ -5264,7 +5255,7 @@ ${text}
       container.classList.add('sidebar-collapsed');
       const toggleButton = document.getElementById('sidebar-toggle');
       if (toggleButton) {
-        toggleButton.textContent = '▶';
+        toggleButton.textContent = '目錄';
         toggleButton.title = '展開目錄';
       }
     }
@@ -5297,12 +5288,19 @@ ${text}
     const highlightButton = document.getElementById('reader-highlight-mode');
     if (!highlightButton) return;
 
-    const highlightsVisible = this.isOfflineMode ? this.showSourceHighlights : this.isHighlightMode;
-    highlightButton.classList.toggle('active', highlightsVisible);
-    highlightButton.title = this.isOfflineMode
-      ? (highlightsVisible ? '隱藏原文作者的重點' : '顯示原文作者的重點')
-      : (highlightsVisible ? '關閉 AI 畫重點模式' : 'AI畫重點模式');
-    highlightButton.textContent = highlightsVisible ? '重點開' : '重點關';
+    highlightButton.textContent = '重點';
+
+    if (this.isOfflineMode) {
+      highlightButton.classList.remove('active');
+      highlightButton.disabled = true;
+      highlightButton.title = '離線版不提供重點切換，請切換到 AI 版本';
+      return;
+    }
+
+    highlightButton.classList.toggle('active', this.isHighlightMode);
+    highlightButton.title = this.isHighlightMode
+      ? '關閉 AI 畫重點模式'
+      : 'AI畫重點模式';
     highlightButton.disabled = false;
   }
 
@@ -5555,24 +5553,18 @@ ${text}
 
     // 更新畫重點按鈕
     if (highlightModeBtn) {
-      const highlightsVisible = this.isOfflineMode ? this.showSourceHighlights : this.isHighlightMode;
-      highlightModeBtn.classList.toggle('active', highlightsVisible);
-      highlightModeBtn.textContent = highlightsVisible ? '重點開' : '重點關';
-      highlightModeBtn.title = this.isOfflineMode
-        ? (highlightsVisible ? '隱藏原文作者的重點' : '顯示原文作者的重點')
-        : (highlightsVisible ? '關閉畫重點模式' : 'AI畫重點模式');
+      highlightModeBtn.textContent = '重點';
     }
 
-    // 根據不同模式調整按鈕說明；離線版只顯示原文作者既有的重點。
+    // 根據不同模式調整按鈕說明；離線版沒有 AI 重點結果，因此不可切換。
     if (this.isOfflineMode) {
       if (versionToggleBtn) {
         versionToggleBtn.disabled = false;
       }
       if (highlightModeBtn) {
-        highlightModeBtn.disabled = false;
-        highlightModeBtn.title = this.showSourceHighlights
-          ? '隱藏原文作者的重點'
-          : '顯示原文作者的重點';
+        highlightModeBtn.classList.remove('active');
+        highlightModeBtn.disabled = true;
+        highlightModeBtn.title = '離線版不提供重點切換，請切換到 AI 版本';
       }
     } else {
       // AI模式下：所有功能都可用
@@ -5580,6 +5572,7 @@ ${text}
         versionToggleBtn.disabled = false;
       }
       if (highlightModeBtn) {
+        highlightModeBtn.classList.toggle('active', this.isHighlightMode);
         highlightModeBtn.disabled = false;
         highlightModeBtn.title = this.isHighlightMode ? '關閉畫重點模式' : 'AI畫重點模式';
       }
@@ -5768,12 +5761,8 @@ ${text}
   // 重點模式切換功能（優化版：直接切換顯示）
   toggleHighlightMode() {
     if (this.isOfflineMode) {
-      this.showSourceHighlights = !this.showSourceHighlights;
-      this.applySourceHighlightVisibility();
       this.updateHighlightButtonState();
-      this.updateStatusDisplay();
-      this.saveSettings();
-      console.log('🔄 原文重點', this.showSourceHighlights ? '顯示' : '隱藏');
+      console.log('ℹ️ 離線版不提供重點切換，請切換到 AI 版本');
       return;
     }
 
@@ -5806,6 +5795,7 @@ ${text}
       highlightButton.title = this.isHighlightMode
         ? '關閉畫重點模式'
         : 'AI畫重點模式';
+      highlightButton.textContent = '重點';
     }
 
     console.log('🔄 重點模式', this.isHighlightMode ? '開啟' : '關閉', '(即時切換)');
@@ -5996,7 +5986,7 @@ ${text}
 
     if (this.isSidebarCollapsed) {
       container.classList.add('sidebar-collapsed');
-      toggleButton.textContent = '▶';
+      toggleButton.textContent = '目錄';
       toggleButton.title = '展開目錄';
     } else {
       container.classList.remove('sidebar-collapsed');

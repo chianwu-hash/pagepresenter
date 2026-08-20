@@ -100,36 +100,6 @@
             color: #212529;
         }
 
-        .shortcuts {
-            background: white;
-            border-radius: 6px;
-            border: 1px solid #dee2e6;
-            padding: 12px;
-        }
-
-        .shortcuts-title {
-            font-size: 12px;
-            font-weight: bold;
-            color: #6c757d;
-            margin-bottom: 8px;
-        }
-
-        .shortcut-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 4px 0;
-            font-size: 12px;
-        }
-
-        .shortcut-key {
-            background: #e9ecef;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: monospace;
-            font-size: 10px;
-        }
-
         .footer {
             text-align: center;
             margin-top: 16px;
@@ -414,26 +384,294 @@
         .reset-priority-btn:hover {
             background: #545b62;
         }
+
+        /* Popup v2：啟動導向、設定收斂 */
+        :root {
+            --popup-primary: #0f6fd6;
+            --popup-primary-dark: #0b56ad;
+            --popup-surface: #ffffff;
+            --popup-bg: #f5f7fb;
+            --popup-border: #dfe7f1;
+            --popup-text: #172033;
+            --popup-muted: #667085;
+            --popup-soft-blue: #eef6ff;
+            --popup-soft-green: #edf8f2;
+            --popup-soft-amber: #fff7df;
+            --popup-radius: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 360px;
+            min-height: 0;
+            padding: 18px;
+            background:
+                radial-gradient(circle at top left, rgba(15, 111, 214, 0.10), transparent 36%),
+                var(--popup-bg);
+            color: var(--popup-text);
+            font-family: "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+            margin-bottom: 16px;
+        }
+
+        .app-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(15, 111, 214, 0.18);
+        }
+
+        .header h1 {
+            font-size: 20px;
+            line-height: 1.2;
+            color: var(--popup-text);
+            margin: 0 0 4px 0;
+            letter-spacing: -0.02em;
+        }
+
+        .header p {
+            font-size: 13px;
+            color: var(--popup-muted);
+        }
+
+        .main-button {
+            min-height: 54px;
+            margin: 0 0 12px 0;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--popup-primary), #1787f5);
+            box-shadow: 0 10px 22px rgba(15, 111, 214, 0.24);
+        }
+
+        .main-button:hover {
+            background: linear-gradient(135deg, var(--popup-primary-dark), var(--popup-primary));
+        }
+
+        .main-button.active {
+            background: linear-gradient(135deg, #139a62, #18b978) !important;
+        }
+
+        .quick-hint {
+            margin: 0 0 12px 0;
+            padding: 10px 12px;
+            border: 1px solid #cfe2ff;
+            border-radius: 12px;
+            background: var(--popup-soft-blue);
+            color: #24527a;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .status {
+            margin-bottom: 14px;
+            padding: 12px;
+            border-radius: var(--popup-radius);
+            border-color: var(--popup-border);
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04);
+        }
+
+        .status-title,
+        .section-title {
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--popup-muted);
+            letter-spacing: 0.04em;
+        }
+
+        .status-content {
+            margin-top: 4px;
+            line-height: 1.5;
+        }
+
+        .section-title {
+            margin: 16px 0 8px 0;
+        }
+
+        .settings-section {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .api-settings,
+        .model-priority-settings,
+        .instruction-box {
+            border-radius: var(--popup-radius);
+            border: 1px solid var(--popup-border);
+            background: var(--popup-surface);
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.035);
+        }
+
+        .api-settings,
+        .model-priority-settings {
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .api-title,
+        .priority-title {
+            min-height: 52px;
+            padding: 10px 12px;
+            background: var(--popup-surface);
+            border-bottom: none;
+            color: var(--popup-text);
+            font-size: 14px;
+        }
+
+        .setting-label {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .setting-summary {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--popup-muted);
+        }
+
+        .api-toggle,
+        .priority-toggle {
+            min-width: 36px;
+            min-height: 36px;
+            border: 1px solid var(--popup-border);
+            border-radius: 10px;
+            background: #f8fafc;
+            color: #475467;
+            font-size: 0;
+            line-height: 1;
+        }
+
+        .api-toggle::before,
+        .priority-toggle::before {
+            content: "設定";
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .api-toggle:hover,
+        .priority-toggle:hover {
+            background: #eef4ff;
+            border-color: #b8d7ff;
+            color: var(--popup-primary);
+        }
+
+        .api-config,
+        .priority-config {
+            margin-top: 0;
+            padding: 12px;
+            border-top: 1px solid var(--popup-border);
+            background: #fbfdff;
+        }
+
+        .api-input,
+        .model-select {
+            min-height: 38px;
+            border-radius: 10px;
+            border-color: #d0d5dd;
+        }
+
+        .api-button,
+        .reset-priority-btn {
+            min-height: 38px;
+            border-radius: 10px;
+            font-weight: 700;
+        }
+
+        .instruction-box {
+            padding: 0;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .instruction-box summary {
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 11px 12px;
+            cursor: pointer;
+            font-weight: 800;
+            color: var(--popup-text);
+        }
+
+        .instruction-box summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .instruction-box summary::after {
+            content: "展開";
+            color: var(--popup-muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .instruction-box[open] summary::after {
+            content: "收合";
+        }
+
+        .instruction-box ol {
+            padding: 0 12px 12px 28px;
+            color: #475467;
+        }
+
+        .footer {
+            margin-top: 12px;
+            color: #98a2b3;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .main-button,
+            .api-toggle,
+            .priority-toggle,
+            .sortable-item {
+                transition: none;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🖥️ 網頁簡報器</h1>
-        <p>大螢幕閱讀優化工具</p>
+        <img class="app-icon" src="icons/icon48.png" alt="">
+        <div>
+            <h1>網頁簡報器</h1>
+            <p>大螢幕閱讀優化工具</p>
+        </div>
     </div>
 
-    <div class="instruction-box">
-        <h3>使用方法</h3>
-        <ol>
-            <li>ESA 會議管理／列印頁可直接啟動</li>
-            <li>若只展示部分內容，請先選取文字</li>
-            <li>其他網頁仍需先選取內容</li>
-        </ol>
+    <button id="toggleReader" class="main-button">
+        啟動簡報模式
+    </button>
+
+    <p class="quick-hint">
+        已針對新北市校務行政系統「會議管理」頁面最佳化；其他網頁請先選取文字。
+    </p>
+
+    <div class="status">
+        <div class="status-title">目前狀態</div>
+        <div class="status-content" id="currentStatus">
+            未啟動
+        </div>
     </div>
 
+    <div class="section-title">AI 設定</div>
+
+    <div class="settings-section">
     <div class="api-settings">
         <div class="api-title">
-            <span>Google Gemini AI 排版增強</span>
+            <span class="setting-label">
+                <span>Google Gemini</span>
+                <span class="setting-summary" id="geminiStatusSummary">未設定</span>
+            </span>
             <button id="apiToggle" class="api-toggle">⚙️</button>
         </div>
         <div id="apiConfig" class="api-config hidden">
@@ -466,7 +704,10 @@
 
     <div class="api-settings">
         <div class="api-title">
-            <span>OpenAI API 模型選擇</span>
+            <span class="setting-label">
+                <span>OpenAI</span>
+                <span class="setting-summary" id="openaiStatusSummary">未設定</span>
+            </span>
             <button id="openaiApiToggle" class="api-toggle">⚙️</button>
         </div>
         <div id="openaiApiConfig" class="api-config hidden">
@@ -475,10 +716,9 @@
             <div class="model-selection">
                 <label for="openaiModel" class="model-label">模型選擇：</label>
                 <select id="openaiModel" class="model-select">
-                    <option value="gpt-4o-mini">GPT-4o Mini (推薦 - 快速且便宜)</option>
-                    <option value="gpt-4o">GPT-4o (高品質)</option>
-                    <option value="gpt-4">GPT-4 (標準)</option>
-                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo (經濟實惠)</option>
+                    <option value="gpt-5.6-luna">GPT-5.6 Luna（推薦：大量文字、低成本）</option>
+                    <option value="gpt-5.6-terra">GPT-5.6 Terra（品質較佳、成本較高）</option>
+                    <option value="gpt-5.6-sol">GPT-5.6 Sol（最高品質、成本最高）</option>
                 </select>
             </div>
 
@@ -491,9 +731,9 @@
                 <button id="saveOpenaiModelOnly" class="api-button" style="width: 100%; background: #28a745;">僅儲存模型選擇</button>
             </div>
             <div class="api-help">
-                每月 $5 免費額度 (約150萬tokens)<br>
+                API 依用量計費，額度與價格請以 OpenAI 帳戶與官方定價為準<br>
                 <a href="https://platform.openai.com/api-keys" target="_blank">取得API金鑰</a><br>
-                <small>💡 GPT-4o Mini 速度快且成本低，推薦使用</small>
+                <small>💡 建議大量文字使用 Luna；若結果不理想再改用 Terra。</small>
             </div>
         </div>
     </div>
@@ -501,7 +741,10 @@
     <!-- AI 模型調用順序設定 -->
     <div class="model-priority-settings">
         <div class="priority-title">
-            <span>🚀 AI 模型調用順序</span>
+            <span class="setting-label">
+                <span>AI 調用順序</span>
+                <span class="setting-summary" id="priorityStatusSummary">Gemini → OpenAI → 離線</span>
+            </span>
             <button id="priorityToggle" class="priority-toggle">⚙️</button>
         </div>
         <div id="priorityConfig" class="priority-config hidden">
@@ -537,55 +780,19 @@
             <button id="resetPriority" class="reset-priority-btn">重設為預設順序</button>
         </div>
     </div>
-
-    <button id="toggleReader" class="main-button">
-        啟動簡報模式
-    </button>
-
-    <div class="controls">
-        <button id="fontIncrease" class="control-button" title="放大字體">
-            🔍+ 放大
-        </button>
-        <button id="fontDecrease" class="control-button" title="縮小字體">
-            🔍- 縮小
-        </button>
-        <button id="highContrast" class="control-button" title="高對比模式">
-            ◐ 對比
-        </button>
-        <button id="focusMode" class="control-button" title="聚焦模式">
-            ◎ 聚焦
-        </button>
     </div>
 
-    <div class="status">
-        <div class="status-title">目前狀態</div>
-        <div class="status-content" id="currentStatus">
-            未啟動
-        </div>
-    </div>
-
-    <div class="shortcuts">
-        <div class="shortcuts-title">快捷鍵（簡報模式中）</div>
-        <div class="shortcut-item">
-            <span>關閉模式</span>
-            <span class="shortcut-key">Esc</span>
-        </div>
-        <div class="shortcut-item">
-            <span>放大字體</span>
-            <span class="shortcut-key">Ctrl++</span>
-        </div>
-        <div class="shortcut-item">
-            <span>縮小字體</span>
-            <span class="shortcut-key">Ctrl+-</span>
-        </div>
-        <div class="shortcut-item">
-            <span>全螢幕</span>
-            <span class="shortcut-key">F11</span>
-        </div>
-    </div>
+    <details class="instruction-box">
+        <summary>使用說明</summary>
+        <ol>
+            <li>新北市校務行政系統「會議管理」頁面可直接啟動</li>
+            <li>若只展示部分內容，請先選取文字</li>
+            <li>其他網頁仍需先選取內容</li>
+        </ol>
+    </details>
 
     <div class="footer">
-        v1.0.0 | 會議室專用閱讀工具
+        v1.1.0 | 會議室專用閱讀工具
     </div>
 
     <script src="popup.js"></script>

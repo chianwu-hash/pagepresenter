@@ -497,21 +497,43 @@ body.reader-mode {
   width: 0 !important;
   padding: 0 !important;
   border-right: none !important;
-  overflow: hidden !important;
+  overflow: visible !important;
 }
 
 .web-reader-active.sidebar-collapsed #web-reader-content {
-  padding-left: 56px !important;
+  padding-left: 72px !important;
 }
 
 .web-reader-active.sidebar-collapsed #sidebar-toggle {
-  position: absolute !important;
-  left: 8px !important;
-  top: 8px !important;
-  z-index: 10 !important;
+  position: fixed !important;
+  left: 16px !important;
+  top: 84px !important;
+  z-index: 1000002 !important;
   background: var(--reader-toolbar-bg) !important;
   border: 1px solid var(--reader-border-color) !important;
-  border-radius: 4px !important;
+  border-radius: 999px !important;
+  color: var(--reader-link-color) !important;
+  padding: 8px 14px !important;
+  min-width: 56px !important;
+  min-height: 36px !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18) !important;
+}
+
+.web-reader-active.sidebar-collapsed #toc-header {
+  overflow: visible !important;
+  padding: 0 !important;
+  border-bottom: none !important;
+  background: transparent !important;
+}
+
+.web-reader-active.sidebar-collapsed #toc-header > span {
+  display: none !important;
+}
+
+.web-reader-active.sidebar-collapsed #table-of-contents {
+  display: none !important;
 }
 
 #web-reader-sidebar {
