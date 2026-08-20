@@ -50,12 +50,86 @@ test('keeps product uncertainty language out of model highlight prompts', () => 
     reader.createGeminiPrompt('會議內容', true),
     reader.createGeminiPrompt('會議內容', false),
     reader.createHighlightPrompt('會議內容', true),
-    reader.createHighlightPrompt('會議內容', false)
+    reader.createHighlightPrompt('會議內容', false),
+    reader.createCategorizedHighlightPrompt('會議內容')
   ];
 
   for (const prompt of prompts) {
     assert.doesNotMatch(prompt, /不是唯一答案|沒有唯一的標準重點|保守判斷|採保守標示|寧可少標/);
   }
+});
+
+test('classified highlight prompt keeps AI original markings source-only', () => {
+  const reader = createParser();
+  const prompt = reader.createCategorizedHighlightPrompt('請至學務處進行導護交接會議');
+
+  assert.match(prompt, /\[\[topic:主題短語\]\]/);
+  assert.match(prompt, /不得刪除、增加、改寫、重排或更正任何文字/);
+  assert.match(prompt, /編號項目、條列項目、換行分隔的事項/);
+  assert.match(prompt, /每個獨立段落最多標示 1 個主題/);
+  assert.match(prompt, /導護交接/);
+  assert.match(prompt, /全校大掃除/);
+  assert.match(prompt, /資源回收/);
+  assert.match(prompt, /休業式/);
+  assert.doesNotMatch(prompt, /topicLabel|主題：/);
+});
+
+test('extracts classified highlight markers with one topic per paragraph', () => {
+  const reader = createParser();
+  const annotations = reader.extractClassifiedHighlightSegments([
+    '請[[time:第十九週(1/3-01/09)]]值勤老師，於[[time:114/1/2(四)10:20]]至[[location:學務處]]進行[[topic:導護交接]]會議，並再次[[topic:導護交接]]。',
+    '',
+    '請至[[地點:正門]]辦理[[主題:交通管制]]，時間為[[時間:放學時間]]。'
+  ].join('\n'));
+
+  assert.deepEqual(annotations, [
+    { type: 'time', segment: '第十九週(1/3-01/09)' },
+    { type: 'time', segment: '114/1/2(四)10:20' },
+    { type: 'location', segment: '學務處' },
+    { type: 'topic', segment: '導護交接' },
+    { type: 'location', segment: '正門' },
+    { type: 'topic', segment: '交通管制' },
+    { type: 'time', segment: '放學時間' }
+  ]);
+});
+
+test('extracts one topic from each line-separated meeting item', () => {
+  const reader = createParser();
+  const annotations = reader.extractClassifiedHighlightSegments([
+    '[[time:本週四]][[topic:兒童週會]]，要頒發感謝獎狀。',
+    '[[time:本週四]][[topic:全校大掃除]]，時間：[[time:9:30-10:10]]。',
+    '[[time:本週五]][[topic:資源回收]]是學期最後一次。',
+    '[[time:下週二]][[topic:休業式]]重點頒發學期前茅獎。'
+  ].join('\n'));
+
+  assert.deepEqual(
+    annotations.filter(item => item.type === 'topic').map(item => item.segment),
+    ['兒童週會', '全校大掃除', '資源回收', '休業式']
+  );
+});
+
+test('renders classified inline highlight markers with distinct classes', () => {
+  const reader = createParser();
+  reader.escapeHtml = text => String(text);
+  const html = reader.processHighlightFormatting(
+    '於[[time:114/1/2(四)10:20]]至[[location:學務處]]進行[[topic:導護交接]]會議'
+  );
+
+  assert.match(html, /reader-highlight-topic/);
+  assert.match(html, /reader-highlight-time/);
+  assert.match(html, /reader-highlight-location/);
+  assert.doesNotMatch(html, /\[\[/);
+});
+
+test('maps text index at node boundary to the following text node', () => {
+  const reader = createParser();
+  const first = { nodeValue: '本週四' };
+  const second = { nodeValue: '兒童週會' };
+
+  const position = reader.findDomPositionForTextIndex([first, second], first.nodeValue.length);
+
+  assert.equal(position.node, second);
+  assert.equal(position.offset, 0);
 });
 
 test('normalizes duplicated markdown heading markers from AI output', () => {

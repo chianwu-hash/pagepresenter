@@ -1494,6 +1494,27 @@ body.reader-mode {
   transition: all 0.2s ease !important; /* 平滑過渡效果 */
 }
 
+.reader-highlight-topic {
+  background-color: #dbeafe !important;
+  color: #1e3a8a !important;
+  border-color: #93c5fd !important;
+  box-shadow: 0 1px 3px rgba(59, 130, 246, 0.24) !important;
+}
+
+.reader-highlight-time {
+  background-color: #ffedd5 !important;
+  color: #9a3412 !important;
+  border-color: #fdba74 !important;
+  box-shadow: 0 1px 3px rgba(249, 115, 22, 0.22) !important;
+}
+
+.reader-highlight-location {
+  background-color: #dcfce7 !important;
+  color: #166534 !important;
+  border-color: #86efac !important;
+  box-shadow: 0 1px 3px rgba(34, 197, 94, 0.2) !important;
+}
+
 /* 高對比模式下的重點高亮 - 柔和的顏色 */
 .high-contrast .reader-highlight {
   background-color: #37474f !important; /* 深藍灰色背景 */
@@ -1502,6 +1523,43 @@ body.reader-mode {
   font-weight: bold !important; /* 粗體但不過度 */
   box-shadow: 0 1px 2px rgba(176, 190, 197, 0.2) !important; /* 輕微陰影 */
 }
+
+.high-contrast .reader-highlight-topic {
+  background-color: #1d4ed8 !important;
+  color: #ffffff !important;
+  border-color: #93c5fd !important;
+}
+
+.high-contrast .reader-highlight-time {
+  background-color: #9a3412 !important;
+  color: #ffffff !important;
+  border-color: #fdba74 !important;
+}
+
+.high-contrast .reader-highlight-location {
+  background-color: #166534 !important;
+  color: #ffffff !important;
+  border-color: #86efac !important;
+}
+
+.theme-soft .reader-highlight-topic {
+  background-color: #dbeafe !important;
+}
+
+.theme-soft .reader-highlight-time {
+  background-color: #fed7aa !important;
+}
+
+.theme-soft .reader-highlight-location {
+  background-color: #bbf7d0 !important;
+}
+
+.reader-highlight-topic::selection,
+.reader-highlight-time::selection,
+.reader-highlight-location::selection {
+  background: rgba(15, 23, 42, 0.24) !important;
+}
+
 
 /* 重點按鈕樣式 */
 #reader-highlight-mode {
