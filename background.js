@@ -17,3 +17,115 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     });
   }
 });
+
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GEMINI_ALLOWED_MODELS = new Set([
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash'
+]);
+
+function getStoredGeminiSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['geminiAPIKey', 'geminiModel'], (result) => {
+      resolve({
+        apiKey: result.geminiAPIKey || '',
+        model: GEMINI_ALLOWED_MODELS.has(result.geminiModel)
+          ? result.geminiModel
+          : 'gemini-3.5-flash'
+      });
+    });
+  });
+}
+
+async function callGemini({ prompt, model, apiKey, maxOutputTokens = 16000 }) {
+  const safeModel = GEMINI_ALLOWED_MODELS.has(model) ? model : 'gemini-3.5-flash';
+  const safePrompt = typeof prompt === 'string' ? prompt : '';
+  const safeMaxOutputTokens = Math.min(Math.max(Number(maxOutputTokens) || 16000, 1), 32000);
+
+  if (!apiKey) throw new Error('未設定 Gemini API 金鑰');
+  if (!safePrompt.trim()) throw new Error('沒有可送往 Gemini 的內容');
+  if (safePrompt.length > 200000) throw new Error('內容過長，請縮小處理範圍');
+
+  const response = await fetch(`${GEMINI_API_BASE}/${safeModel}:generateContent`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey
+    },
+    body: JSON.stringify({
+      contents: [{
+        role: 'user',
+        parts: [{ text: safePrompt }]
+      }],
+      generationConfig: {
+        maxOutputTokens: safeMaxOutputTokens,
+        candidateCount: 1
+      }
+    })
+  });
+
+  if (!response.ok) {
+    let providerMessage = '';
+    try {
+      const errorJson = await response.json();
+      providerMessage = errorJson?.error?.message || '';
+    } catch (_error) {
+      // Do not return raw provider bodies; they may contain request details.
+    }
+
+    const error = new Error(providerMessage || `Gemini API 請求失敗 (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+
+  const result = await response.json();
+  const candidate = result?.candidates?.[0];
+  const text = candidate?.content?.parts
+    ?.map(part => typeof part.text === 'string' ? part.text : '')
+    .join('')
+    .trim();
+
+  if (!text) throw new Error('Gemini API 未返回可用文字');
+
+  return {
+    text,
+    finishReason: candidate.finishReason || '',
+    model: safeModel,
+    maxOutputTokens: safeMaxOutputTokens,
+    usageMetadata: result?.usageMetadata || null
+  };
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.action !== 'geminiGenerate' && message?.action !== 'geminiTest') {
+    return false;
+  }
+
+  (async () => {
+    try {
+      const stored = await getStoredGeminiSettings();
+      const model = GEMINI_ALLOWED_MODELS.has(message.model) ? message.model : stored.model;
+      const apiKey = message.action === 'geminiTest' && typeof message.apiKey === 'string'
+        ? message.apiKey.trim()
+        : stored.apiKey;
+      const prompt = message.action === 'geminiTest' ? '請只回答：OK' : message.prompt;
+      const result = await callGemini({
+        prompt,
+        model,
+        apiKey,
+        maxOutputTokens: message.action === 'geminiTest' ? 10 : message.maxOutputTokens
+      });
+
+      sendResponse({ ok: true, ...result });
+    } catch (error) {
+      sendResponse({
+        ok: false,
+        error: error?.message || 'Gemini API 處理失敗',
+        status: error?.status || 0
+      });
+    }
+  })();
+
+  return true;
+});

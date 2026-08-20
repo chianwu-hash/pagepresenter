@@ -824,6 +824,19 @@ body.reader-mode {
   object-fit: contain !important;
 }
 
+.reader-image[data-reader-lightbox-image="true"] {
+  cursor: zoom-in !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease !important;
+}
+
+.reader-image[data-reader-lightbox-image="true"]:hover,
+.reader-image[data-reader-lightbox-image="true"]:focus-visible {
+  transform: translateY(-1px) scale(1.01) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18) !important;
+  outline: 3px solid var(--reader-link-color) !important;
+  outline-offset: 4px !important;
+}
+
 .reader-media audio {
   width: 100% !important;
 }
@@ -836,6 +849,153 @@ body.reader-mode {
 .reader-embedded-link {
   display: inline-block !important;
   padding: 10px 14px !important;
+}
+
+.reader-lightbox-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1000005 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 1dvh 1vw !important;
+  overflow: hidden !important;
+  overscroll-behavior: contain !important;
+  background: rgba(6, 21, 28, 0.88) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.reader-lightbox-panel {
+  width: 98vw !important;
+  height: 98dvh !important;
+  max-height: 1200px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  border-radius: 18px !important;
+  background: var(--reader-bg-color) !important;
+  color: var(--reader-text-color) !important;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.45) !important;
+}
+
+.reader-lightbox-close {
+  flex: 0 0 auto !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  min-width: auto !important;
+  padding: 0 12px !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+.reader-lightbox-content {
+  min-height: 0 !important;
+  flex: 1 !important;
+  display: block !important;
+}
+
+.reader-lightbox-image-wrap {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  background: #dce7e7 !important;
+  touch-action: none !important;
+}
+
+.reader-lightbox-image-stage {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: grab !important;
+  overflow: hidden !important;
+}
+
+.reader-lightbox-image-stage.is-zoomed {
+  cursor: grabbing !important;
+}
+
+.reader-lightbox-image {
+  display: block !important;
+  width: calc(100% - 24px) !important;
+  height: calc(100% - 24px) !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: contain !important;
+  user-select: none !important;
+  pointer-events: none !important;
+  transform-origin: center center !important;
+  transition: transform 0.08s ease-out !important;
+}
+
+.reader-lightbox-zoom-controls {
+  position: absolute !important;
+  top: 10px !important;
+  left: auto !important;
+  right: 10px !important;
+  z-index: 3 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: max-content !important;
+  max-width: calc(100% - 20px) !important;
+  padding: 7px !important;
+  border: 1px solid rgba(255, 255, 255, 0.55) !important;
+  border-radius: 999px !important;
+  background: rgba(16, 42, 54, 0.88) !important;
+  box-shadow: 0 12px 35px rgba(16, 42, 54, 0.28) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.reader-lightbox-zoom-controls button,
+.reader-lightbox-zoom-controls span {
+  min-width: 38px !important;
+  height: 34px !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+.reader-lightbox-zoom-controls button {
+  cursor: pointer !important;
+}
+
+.reader-lightbox-zoom-controls button:hover,
+.reader-lightbox-zoom-controls button:focus-visible {
+  background: #ffd166 !important;
+  color: #102a36 !important;
+  outline: none !important;
+}
+
+.reader-lightbox-scale {
+  min-width: 55px !important;
+  color: #ffd166 !important;
+  background: transparent !important;
+}
+
+.reader-lightbox-hint {
+  position: absolute !important;
+  left: 12px !important;
+  bottom: 10px !important;
+  z-index: 2 !important;
+  margin: 0 !important;
+  padding: 6px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(16, 42, 54, 0.72) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+  font-size: 12px !important;
+  pointer-events: none !important;
 }
 
 .reader-attachments {
@@ -924,6 +1084,59 @@ body.reader-mode {
 }
 
 @media (max-width: 760px) {
+  .reader-lightbox-backdrop {
+    padding: 0 !important;
+  }
+
+  .reader-lightbox-panel {
+    width: 100vw !important;
+    height: 100dvh !important;
+    border-radius: 0 !important;
+  }
+
+  .reader-lightbox-close {
+    padding: 0 10px !important;
+  }
+
+  .reader-lightbox-content {
+    display: block !important;
+    overflow: hidden !important;
+  }
+
+  .reader-lightbox-image {
+    width: calc(100% - 12px) !important;
+    height: calc(100% - 12px) !important;
+  }
+
+  .reader-lightbox-zoom-controls {
+    top: 10px !important;
+    left: auto !important;
+    right: 10px !important;
+    gap: 4px !important;
+    max-width: calc(100% - 20px) !important;
+    padding: 5px !important;
+  }
+
+  .reader-lightbox-zoom-controls button,
+  .reader-lightbox-zoom-controls span {
+    min-width: 32px !important;
+    height: 30px !important;
+    font-size: 12px !important;
+  }
+
+  .reader-lightbox-scale {
+    min-width: 48px !important;
+  }
+
+  .reader-lightbox-hint {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 9px !important;
+    width: fit-content !important;
+    max-width: calc(100% - 20px) !important;
+    font-size: 11px !important;
+  }
+
   .reader-attachment-card {
     grid-template-columns: auto minmax(0, 1fr) !important;
   }

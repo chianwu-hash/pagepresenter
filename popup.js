@@ -199,14 +199,110 @@ class PopupController {
     return tab;
   }
 
+  async queryTabs(query) {
+    try {
+      return await chrome.tabs.query(query);
+    } catch (error) {
+      console.warn('查詢分頁失敗:', error?.message || error);
+      return [];
+    }
+  }
+
+  isLikelyExtensionPage(tab) {
+    const url = tab?.url || tab?.pendingUrl || '';
+    return url.startsWith('chrome-extension://') || url.startsWith('chrome://') ||
+      url.startsWith('edge://') || url.startsWith('about:');
+  }
+
+  uniqueTabs(tabs) {
+    const seen = new Set();
+    return tabs.filter(tab => {
+      if (!tab?.id || seen.has(tab.id)) return false;
+      seen.add(tab.id);
+      return true;
+    });
+  }
+
+  async collectReaderTabCandidates() {
+    const groups = await Promise.all([
+      this.queryTabs({ active: true, currentWindow: true }),
+      this.queryTabs({ active: true, lastFocusedWindow: true }),
+      this.queryTabs({ active: true }),
+      this.queryTabs({})
+    ]);
+
+    return this.uniqueTabs(groups.flat())
+      .filter(tab => !this.isLikelyExtensionPage(tab));
+  }
+
+  async findReaderTab() {
+    const candidates = await this.collectReaderTabCandidates();
+
+    for (const tab of candidates) {
+      try {
+        const response = await chrome.tabs.sendMessage(tab.id, { action: 'getReaderState' });
+        if (response?.ok) {
+          return { tab, state: response.state || null };
+        }
+      } catch (_error) {
+        // Some tabs cannot receive content-script messages; keep looking.
+      }
+    }
+
+    return { tab: candidates[0] || null, state: null };
+  }
+
   async sendMessageToTab(message) {
     try {
-      const tab = await this.getCurrentTab();
-      await chrome.tabs.sendMessage(tab.id, message);
+      const { tab } = await this.findReaderTab();
+      if (!tab?.id) {
+        throw new Error('找不到目前分頁');
+      }
+      return await this.sendMessageWithContentScriptFallback(tab, message);
     } catch (error) {
       console.error('發送消息到內容腳本失敗:', error);
       this.showError('無法與網頁通信，請重新整理頁面');
+      return { ok: false, error: error?.message || '無法與網頁通信' };
     }
+  }
+
+  async sendMessageWithContentScriptFallback(tab, message) {
+    try {
+      return await chrome.tabs.sendMessage(tab.id, message);
+    } catch (firstError) {
+      if (!this.isMissingContentScriptError(firstError)) {
+        throw firstError;
+      }
+
+      await this.injectContentScript(tab.id);
+      return await chrome.tabs.sendMessage(tab.id, message);
+    }
+  }
+
+  isMissingContentScriptError(error) {
+    const message = error?.message || '';
+    return message.includes('Receiving end does not exist') ||
+      message.includes('Could not establish connection');
+  }
+
+  async injectContentScript(tabId) {
+    if (!chrome.scripting?.executeScript) {
+      throw new Error('此版本缺少 scripting 權限，請重新載入擴充功能');
+    }
+
+    await chrome.scripting.insertCSS({
+      target: { tabId },
+      files: ['styles.css']
+    });
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content.js']
+    });
+  }
+
+  async getCurrentTabReaderState() {
+    const { state } = await this.findReaderTab();
+    return state;
   }
 
   async toggleReader() {
@@ -214,10 +310,17 @@ class PopupController {
       this.toggleButton.textContent = '正在啟動...';
       this.toggleButton.disabled = true;
 
-      await this.sendMessageToTab({ action: 'toggleReader' });
+      const response = await this.sendMessageToTab({ action: 'toggleReader' });
+      if (!response?.ok) {
+        throw new Error(response?.error || '目前分頁沒有回應簡報器操作');
+      }
 
       setTimeout(() => {
-        this.updateStatus();
+        if (response.state) {
+          this.applyStatus(response.state);
+        } else {
+          this.updateStatus();
+        }
         this.toggleButton.disabled = false;
       }, 500);
     } catch (error) {
@@ -259,14 +362,18 @@ class PopupController {
     }
   }
 
-  updateStatus() {
-    chrome.storage.local.get(['webReaderSettings', 'openaiAPIKey', 'openaiModel', 'geminiAPIKey'], (result) => {
-      const settings = result.webReaderSettings || {
+  async updateStatus() {
+    chrome.storage.local.get(['webReaderSettings', 'openaiAPIKey', 'openaiModel', 'geminiAPIKey'], async (result) => {
+      const storedSettings = result.webReaderSettings || {
         isActive: false,
         fontSize: 32,
         isHighContrast: false,
         isFocusMode: false
       };
+      const tabState = await this.getCurrentTabReaderState();
+      const settings = tabState
+        ? { ...storedSettings, ...tabState }
+        : { ...storedSettings, isActive: false };
 
       const apiInfo = {
         hasOpenAI: !!(result.openaiAPIKey && result.openaiAPIKey.length > 0),
@@ -274,10 +381,14 @@ class PopupController {
         openaiModel: result.openaiModel || 'gpt-4o-mini'
       };
 
-      this.updateToggleButton(settings.isActive);
-      this.updateControlButtons(settings);
-      this.updateStatusText(settings, apiInfo);
+      this.applyStatus(settings, apiInfo);
     });
+  }
+
+  applyStatus(settings, apiInfo = null) {
+    this.updateToggleButton(settings.isActive);
+    this.updateControlButtons(settings);
+    this.updateStatusText(settings, apiInfo);
   }
 
   updateToggleButton(isActive) {
@@ -399,7 +510,7 @@ class PopupController {
     }
 
     // 取得選擇的模型
-    const selectedModel = this.geminiModel ? this.geminiModel.value : 'gemini-1.5-flash';
+    const selectedModel = this.geminiModel ? this.geminiModel.value : 'gemini-3.5-flash';
 
     console.log('📝 即將儲存的設定:');
     console.log('  - API金鑰長度:', apiKey ? apiKey.length : 0);
@@ -436,7 +547,17 @@ class PopupController {
     const loadSettings = () => {
       chrome.storage.local.get(['geminiAPIKey', 'geminiModel'], (result) => {
         const apiKey = result.geminiAPIKey || '';
-        const selectedModel = result.geminiModel || 'gemini-1.5-flash'; // 預設為 1.5 flash
+        const availableModels = this.geminiModel
+          ? Array.from(this.geminiModel.options).map(option => option.value)
+          : ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
+        const selectedModel = availableModels.includes(result.geminiModel)
+          ? result.geminiModel
+          : 'gemini-3.5-flash';
+
+        // 舊版本儲存的模型可能已下架；載入時直接遷移到目前預設值。
+        if (result.geminiModel && result.geminiModel !== selectedModel) {
+          chrome.storage.local.set({ geminiModel: selectedModel });
+        }
 
         console.log('📥 載入的設定:');
         console.log('  - API金鑰存在:', !!apiKey);
@@ -593,44 +714,28 @@ class PopupController {
     }
 
     // 取得選擇的模型
-    const selectedModel = this.geminiModel ? this.geminiModel.value : 'gemini-1.5-flash';
+    const selectedModel = this.geminiModel ? this.geminiModel.value : 'gemini-3.5-flash';
 
     // 顯示測試狀態
     this.testApiKey.textContent = '測試中...';
     this.testApiKey.disabled = true;
 
     try {
-      // 發送測試請求到Gemini API，使用選擇的模型
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: 'Hello'
-            }]
-          }],
-          generationConfig: {
-            maxOutputTokens: 10,
-            temperature: 0.1
-          }
-        })
+      const response = await chrome.runtime.sendMessage({
+        action: 'geminiTest',
+        apiKey,
+        model: selectedModel
       });
 
-      if (response.ok) {
+      if (response?.ok) {
         this.showApiSuccess('API金鑰測試成功！');
       } else {
-        const errorText = await response.text();
-        console.error('API測試失敗:', errorText);
-
-        let errorMessage = 'API金鑰測試失敗';
-        if (response.status === 400) {
+        let errorMessage = response?.error || 'API金鑰測試失敗';
+        if (response?.status === 400) {
           errorMessage = 'API金鑰格式錯誤';
-        } else if (response.status === 401 || response.status === 403) {
+        } else if (response?.status === 401 || response?.status === 403) {
           errorMessage = 'API金鑰無效或權限不足';
-        } else if (response.status === 429) {
+        } else if (response?.status === 429) {
           errorMessage = 'API請求頻率超過限制';
         }
 
@@ -1038,56 +1143,7 @@ class PopupController {
   }
 }
 
-// 更新 content.js 中的消息處理
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'toggleReader') {
-    if (window.webReader) {
-      window.webReader.toggleReader();
-    }
-  } else if (message.action === 'adjustFont') {
-    if (window.webReader) {
-      window.webReader.adjustFontSize(message.delta);
-    }
-  } else if (message.action === 'toggleContrast') {
-    if (window.webReader) {
-      window.webReader.toggleHighContrast();
-    }
-  } else if (message.action === 'toggleFocus') {
-    if (window.webReader) {
-      window.webReader.toggleFocusMode();
-    }
-  }
-});
-
 // 等待 DOM 載入完成
 document.addEventListener('DOMContentLoaded', () => {
   new PopupController();
-});
-
-// 處理快捷鍵命令
-chrome.commands.onCommand.addListener((command) => {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]) {
-      let message = {};
-
-      switch(command) {
-        case 'toggle-reader':
-          message = { action: 'toggleReader' };
-          break;
-        case 'font-increase':
-          message = { action: 'adjustFont', delta: 4 };
-          break;
-        case 'font-decrease':
-          message = { action: 'adjustFont', delta: -4 };
-          break;
-        case 'toggle-fullscreen':
-          message = { action: 'toggleFullscreen' };
-          break;
-      }
-
-      if (message.action) {
-        chrome.tabs.sendMessage(tabs[0].id, message);
-      }
-    }
-  });
 });
