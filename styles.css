@@ -693,6 +693,16 @@ body.reader-mode {
   font-weight: normal !important;
 }
 
+#reader-main-content .reader-esa-metadata,
+.reader-esa-metadata {
+  font-size: calc(var(--reader-font-size) * 0.72) !important;
+  line-height: 1.45 !important;
+  margin: 6px 0 14px !important;
+  color: #7b8794 !important;
+  opacity: 0.78 !important;
+  text-align: left !important;
+}
+
 .reader-list {
   margin: 16px 0 !important;
   padding-left: 32px !important;

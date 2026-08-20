@@ -132,6 +132,16 @@ test('maps text index at node boundary to the following text node', () => {
   assert.equal(position.offset, 0);
 });
 
+test('detects ESA edit metadata lines for muted display and AI exclusion', () => {
+  const reader = createParser();
+
+  assert.equal(
+    reader.isEsaMetadataText('(教務處 陳麗如 於 115-06-09 07:58 新增 / 115-06-09 08:19 修改)'),
+    true
+  );
+  assert.equal(reader.isEsaMetadataText('1.114學年度王延生女士獎助學金'), false);
+});
+
 test('normalizes duplicated markdown heading markers from AI output', () => {
   const reader = createParser();
   const heading = reader.parseMarkdownHeadingLine('### # 1.1 教務處工作報告');

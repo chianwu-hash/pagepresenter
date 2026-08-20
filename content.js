@@ -595,6 +595,12 @@ class WebReader {
     if (text.length < 2 && !paragraph.querySelector('a, img')) return;
 
     const isEsaBody = this.isInsideEsaReportCard(source);
+    const isEsaMetadata = isEsaBody && this.isEsaMetadataText(text);
+    if (isEsaMetadata) {
+      paragraph.classList.add('reader-esa-metadata');
+      paragraph.dataset.readerSkipAiHighlight = 'true';
+    }
+
     if (!isEsaBody && this.isConservativeOfflineHeader(text)) {
       const heading = document.createElement('h2');
       heading.className = 'reader-header reader-h2';
@@ -604,6 +610,11 @@ class WebReader {
     }
 
     target.appendChild(paragraph);
+  }
+
+  isEsaMetadataText(text) {
+    const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+    return /^\([^()]+ 於 \d{2,3}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}\s+新增\s*\/\s*\d{2,3}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}\s+修改\)$/.test(normalized);
   }
 
   isInsideEsaReportCard(node) {
@@ -4310,6 +4321,7 @@ ${text}
     const candidates = Array.from(root.querySelectorAll(selector))
       .filter(element => {
         if (!element || element.closest('.reader-highlight')) return false;
+        if (element.closest('.reader-esa-metadata, [data-reader-skip-ai-highlight="true"]')) return false;
         return Boolean((element.textContent || '').trim());
       });
 
@@ -4347,6 +4359,7 @@ ${text}
           const parent = node.parentElement;
           if (!parent || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
           if (parent.closest('.reader-highlight')) return NodeFilter.FILTER_REJECT;
+          if (parent.closest('.reader-esa-metadata, [data-reader-skip-ai-highlight="true"]')) return NodeFilter.FILTER_REJECT;
           if (parent.closest('script, style')) return NodeFilter.FILTER_REJECT;
           return NodeFilter.FILTER_ACCEPT;
         }
@@ -4434,6 +4447,10 @@ ${text}
     let markdown = '';
     Array.from(element.children || []).forEach(child => {
       if (child.classList.contains('reader-attachment-card')) {
+        return;
+      }
+      if (child.classList.contains('reader-esa-metadata') ||
+        child.dataset.readerSkipAiHighlight === 'true') {
         return;
       }
 
@@ -4863,8 +4880,6 @@ ${text}
     const meetingRoot = document.querySelector('.meeting.ng-scope, .meeting');
     if (!meetingRoot) return null;
 
-    const headerTitle = meetingRoot.querySelector(':scope > .meeting-header--title');
-    const headerInfo = meetingRoot.querySelector(':scope > .meeting-header > .meeting-header--info');
     const reportCards = Array.from(
       meetingRoot.querySelectorAll('.meeting-card.meeting-card--yellow')
     ).filter(card => {
@@ -4876,7 +4891,7 @@ ${text}
 
     // ESA 會議內容頁後半還有「編輯完成」「出席簽到」「人員簽收」與
     // 「公開閱覽」等管理卡；它們不是會議簡報內容，不得整塊擷取。
-    const contentSections = [headerTitle, headerInfo, ...reportCards]
+    const contentSections = reportCards
       .filter(Boolean)
       .filter(element => this.isVisibleSourceElement(element))
       .filter(element => !element.closest('#web-reader-container'))
