@@ -34,6 +34,9 @@ class WebReader {
     this.imageLightbox = null;
     this.imageLightboxPreviousOverflow = '';
     this.imageLightboxState = null;
+    this.htmlSlidesLightbox = null;
+    this.htmlSlidesPreviousOverflow = '';
+    this.htmlSlidesState = null;
     this.init();
   }
 
@@ -78,6 +81,10 @@ class WebReader {
           <div class="toolbar-divider toolbar-ai-divider" aria-hidden="true"></div>
           <div class="toolbar-group toolbar-group-ai" aria-label="AI 功能">
             <button id="reader-ai-process" class="toolbar-button toolbar-ai-button" title="送給 AI 處理">AI 處理</button>
+          </div>
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <div class="toolbar-group toolbar-group-slides" aria-label="HTML 簡報">
+            <button id="reader-html-slides" class="toolbar-button toolbar-slides-button" title="轉成 HTML 簡報">轉成 HTML 簡報</button>
           </div>
         </div>
         <div class="toolbar-right" aria-label="目前狀態">
@@ -126,6 +133,7 @@ class WebReader {
       if (e.target.disabled) return;
       this.toggleHighlightMode();
     };
+    document.getElementById('reader-html-slides').onclick = () => this.openHtmlSlidesLightbox();
     document.getElementById('reader-ai-process').onclick = () => this.startAIProcessing();
     document.getElementById('sidebar-toggle').onclick = () => this.toggleSidebar();
 
@@ -363,7 +371,10 @@ class WebReader {
 
   updateAIProcessButtonState() {
     const button = document.getElementById('reader-ai-process');
-    if (!button) return;
+    if (!button) {
+      this.updateHtmlSlidesButtonState();
+      return;
+    }
 
     const shouldShow = this.isOfflineMode &&
       !!this.originalSelectedText &&
@@ -376,6 +387,27 @@ class WebReader {
     button.title = this.isAIProcessing
       ? 'AI 處理中'
       : '將本次內容送給已設定的 AI 供應商處理';
+
+    this.updateHtmlSlidesButtonState();
+  }
+
+  hasHtmlSlidesAiReady() {
+    return Boolean(this.simplifiedContent || this.originalFormattedContent || this.highlightData);
+  }
+
+  updateHtmlSlidesButtonState() {
+    const button = document.getElementById('reader-html-slides');
+    if (!button) return;
+
+    const ready = this.hasHtmlSlidesAiReady();
+    button.disabled = !ready || this.isAIProcessing;
+    if (this.isAIProcessing) {
+      button.title = 'AI 處理中，完成後才能轉成 HTML 簡報';
+    } else if (!ready) {
+      button.title = '請先完成 AI 處理，再轉成 HTML 簡報';
+    } else {
+      button.title = '轉成 HTML 簡報';
+    }
   }
 
   // 統一更新所有狀態顯示 - 簡化版本
@@ -959,6 +991,336 @@ class WebReader {
 
     const item = items.find(candidate => this.getEsaAttachmentStableKey(candidate) === key);
     return item?.querySelector('[ng-click*="attach_file"]') || null;
+  }
+
+  openHtmlSlidesLightbox() {
+    if (!this.hasHtmlSlidesAiReady()) {
+      this.showStatusNotification('請先完成 AI 處理，再轉成 HTML 簡報');
+      this.updateHtmlSlidesButtonState();
+      return;
+    }
+
+    const slides = this.buildHtmlSlidesFromCurrentContent();
+    if (slides.length === 0) {
+      this.showStatusNotification('目前沒有可轉成 HTML 簡報的內容');
+      return;
+    }
+
+    this.closeHtmlSlidesLightbox();
+    this.htmlSlidesPreviousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'reader-slides-lightbox';
+    backdrop.setAttribute('role', 'dialog');
+    backdrop.setAttribute('aria-modal', 'true');
+    backdrop.setAttribute('aria-label', 'HTML 簡報播放');
+    backdrop.tabIndex = -1;
+
+    const topbar = document.createElement('div');
+    topbar.className = 'reader-slides-topbar';
+
+    const title = document.createElement('div');
+    title.className = 'reader-slides-title';
+    title.textContent = 'HTML 簡報';
+
+    const counter = document.createElement('div');
+    counter.className = 'reader-slides-counter';
+    counter.setAttribute('aria-live', 'polite');
+
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'reader-slides-close';
+    closeButton.textContent = '關閉 ×';
+    closeButton.setAttribute('aria-label', '關閉 HTML 簡報');
+    closeButton.onclick = () => this.closeHtmlSlidesLightbox();
+
+    const previousButton = document.createElement('button');
+    previousButton.type = 'button';
+    previousButton.className = 'reader-slides-nav reader-slides-nav-prev';
+    previousButton.textContent = '‹';
+    previousButton.setAttribute('aria-label', '上一頁');
+    previousButton.onclick = () => this.moveHtmlSlideBy(-1);
+
+    const nextButton = document.createElement('button');
+    nextButton.type = 'button';
+    nextButton.className = 'reader-slides-nav reader-slides-nav-next';
+    nextButton.textContent = '›';
+    nextButton.setAttribute('aria-label', '下一頁');
+    nextButton.onclick = () => this.moveHtmlSlideBy(1);
+
+    const stage = document.createElement('div');
+    stage.className = 'reader-slides-stage';
+
+    slides.forEach((slide, index) => {
+      const section = document.createElement('section');
+      section.className = 'reader-slide-card';
+      section.setAttribute('aria-label', slide.title || `第 ${index + 1} 頁`);
+      section.dataset.slideIndex = String(index);
+
+      const slideHeader = document.createElement('header');
+      slideHeader.className = 'reader-slide-header';
+
+      const slideTitle = document.createElement('h2');
+      slideTitle.className = 'reader-slide-title';
+      slideTitle.textContent = slide.title || `第 ${index + 1} 頁`;
+
+      const slideMeta = document.createElement('span');
+      slideMeta.className = 'reader-slide-meta';
+      slideMeta.textContent = `${index + 1} / ${slides.length}`;
+
+      slideHeader.appendChild(slideTitle);
+      slideHeader.appendChild(slideMeta);
+
+      const body = document.createElement('div');
+      body.className = 'reader-slide-body';
+      body.appendChild(slide.content);
+
+      section.appendChild(slideHeader);
+      section.appendChild(body);
+      stage.appendChild(section);
+    });
+
+    const toc = document.createElement('div');
+    toc.className = 'reader-slides-toc';
+    toc.setAttribute('aria-label', '簡報頁面');
+    slides.forEach((slide, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'reader-slides-toc-item';
+      button.textContent = slide.title || `第 ${index + 1} 頁`;
+      button.dataset.slideIndex = String(index);
+      button.onclick = () => this.goToHtmlSlide(index);
+      toc.appendChild(button);
+    });
+
+    topbar.appendChild(title);
+    topbar.appendChild(toc);
+    topbar.appendChild(counter);
+    topbar.appendChild(closeButton);
+
+    backdrop.appendChild(topbar);
+    backdrop.appendChild(previousButton);
+    backdrop.appendChild(stage);
+    backdrop.appendChild(nextButton);
+
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) this.closeHtmlSlidesLightbox();
+    });
+
+    backdrop.addEventListener('click', event => {
+      const attachmentButton = event.target.closest('[data-reader-attachment-id]');
+      if (attachmentButton) {
+        event.preventDefault();
+        this.openEsaAttachment(
+          attachmentButton.dataset.readerAttachmentId,
+          attachmentButton.dataset.readerAttachmentName || '附件'
+        );
+        return;
+      }
+
+      const image = event.target.closest('img.reader-image[data-reader-lightbox-image="true"]');
+      if (image) {
+        event.preventDefault();
+        this.openImageLightbox(image);
+      }
+    });
+
+    this.htmlSlidesLightbox = backdrop;
+    this.htmlSlidesState = {
+      index: 0,
+      slides,
+      counter,
+      previousButton,
+      nextButton,
+      tocButtons: Array.from(toc.querySelectorAll('.reader-slides-toc-item')),
+      slideElements: Array.from(stage.querySelectorAll('.reader-slide-card'))
+    };
+
+    document.body.appendChild(backdrop);
+    this.updateHtmlSlidesLightbox();
+    backdrop.focus({ preventScroll: true });
+  }
+
+  closeHtmlSlidesLightbox() {
+    if (!this.htmlSlidesLightbox) return;
+    this.htmlSlidesLightbox.remove();
+    this.htmlSlidesLightbox = null;
+    this.htmlSlidesState = null;
+    document.body.style.overflow = this.htmlSlidesPreviousOverflow || '';
+    this.htmlSlidesPreviousOverflow = '';
+  }
+
+  moveHtmlSlideBy(delta) {
+    if (!this.htmlSlidesState) return;
+    this.goToHtmlSlide(this.htmlSlidesState.index + delta);
+  }
+
+  goToHtmlSlide(index) {
+    if (!this.htmlSlidesState) return;
+    const maxIndex = this.htmlSlidesState.slides.length - 1;
+    this.htmlSlidesState.index = Math.max(0, Math.min(index, maxIndex));
+    this.updateHtmlSlidesLightbox();
+  }
+
+  updateHtmlSlidesLightbox() {
+    if (!this.htmlSlidesState) return;
+    const { index, slides, counter, previousButton, nextButton, tocButtons, slideElements } =
+      this.htmlSlidesState;
+
+    slideElements.forEach((slide, slideIndex) => {
+      const isActive = slideIndex === index;
+      slide.classList.toggle('is-active', isActive);
+      slide.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+    });
+
+    tocButtons.forEach((button, slideIndex) => {
+      const isActive = slideIndex === index;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-current', isActive ? 'page' : 'false');
+    });
+    this.scrollActiveHtmlSlideTocButtonIntoView();
+
+    if (counter) counter.textContent = `${index + 1} / ${slides.length}`;
+    if (previousButton) previousButton.disabled = index === 0;
+    if (nextButton) nextButton.disabled = index === slides.length - 1;
+  }
+
+  scrollActiveHtmlSlideTocButtonIntoView() {
+    if (!this.htmlSlidesState) return;
+    const activeButton = this.htmlSlidesState.tocButtons?.[this.htmlSlidesState.index];
+    if (!activeButton) return;
+
+    requestAnimationFrame(() => {
+      if (!this.htmlSlidesLightbox || !activeButton.isConnected) return;
+      const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      activeButton.scrollIntoView({
+        block: 'nearest',
+        inline: 'center',
+        behavior: prefersReducedMotion ? 'auto' : 'smooth'
+      });
+    });
+  }
+
+  handleHtmlSlidesKeyboard(event) {
+    switch (event.key) {
+      case 'Escape':
+        event.preventDefault();
+        this.closeHtmlSlidesLightbox();
+        break;
+      case 'ArrowRight':
+      case 'PageDown':
+      case ' ':
+        event.preventDefault();
+        this.moveHtmlSlideBy(1);
+        break;
+      case 'ArrowLeft':
+      case 'PageUp':
+        event.preventDefault();
+        this.moveHtmlSlideBy(-1);
+        break;
+      case 'Home':
+        event.preventDefault();
+        this.goToHtmlSlide(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        if (this.htmlSlidesState) {
+          this.goToHtmlSlide(this.htmlSlidesState.slides.length - 1);
+        }
+        break;
+    }
+  }
+
+  buildHtmlSlidesFromCurrentContent() {
+    const sourceRoot = document.getElementById('reader-main-content');
+    if (!sourceRoot || !sourceRoot.textContent.trim()) return [];
+
+    const entries = this.getHtmlSlideTocEntries(sourceRoot);
+    if (entries.length === 0) {
+      const content = this.prepareHtmlSlideContent(sourceRoot.cloneNode(true));
+      return content ? [{ title: '簡報內容', content }] : [];
+    }
+
+    const slides = [];
+    const firstSection = this.sections[entries[0].sectionIndex];
+    if (firstSection && sourceRoot.firstChild && sourceRoot.firstChild !== firstSection) {
+      const introFragment = this.cloneHtmlSlideRange(sourceRoot, sourceRoot.firstChild, firstSection);
+      const introContent = this.prepareHtmlSlideContent(introFragment, '會議資訊');
+      if (introContent) {
+        slides.push({ title: '會議資訊', content: introContent });
+      }
+    }
+
+    entries.forEach((entry, index) => {
+      const nextEntry = entries[index + 1];
+      const startNode = this.sections[entry.sectionIndex];
+      const endBeforeNode = nextEntry ? this.sections[nextEntry.sectionIndex] : null;
+      const fragment = this.cloneHtmlSlideRange(sourceRoot, startNode, endBeforeNode);
+      const content = this.prepareHtmlSlideContent(fragment, entry.item.text);
+      if (content) {
+        slides.push({ title: entry.item.text, content });
+      }
+    });
+
+    return slides;
+  }
+
+  getHtmlSlideTocEntries(sourceRoot) {
+    if (!Array.isArray(this.sections) || this.sections.length === 0) return [];
+    if (!Array.isArray(this.tableOfContents) || this.tableOfContents.length === 0) return [];
+
+    return this.getTableOfContentsDisplayItems()
+      .filter(entry => {
+        const section = this.sections[entry.sectionIndex];
+        return section && sourceRoot.contains(section);
+      })
+      .sort((a, b) => a.sectionIndex - b.sectionIndex);
+  }
+
+  cloneHtmlSlideRange(sourceRoot, startNode, endBeforeNode) {
+    const fragment = document.createDocumentFragment();
+    const firstNode = startNode || sourceRoot.firstChild;
+    if (!firstNode) return fragment;
+
+    try {
+      const range = document.createRange();
+      range.setStartBefore(firstNode);
+      if (endBeforeNode && sourceRoot.contains(endBeforeNode)) {
+        range.setEndBefore(endBeforeNode);
+      } else if (sourceRoot.lastChild) {
+        range.setEndAfter(sourceRoot.lastChild);
+      }
+      return range.cloneContents();
+    } catch (error) {
+      console.warn('建立 HTML 簡報分頁內容失敗，改用整頁內容:', error);
+      return sourceRoot.cloneNode(true);
+    }
+  }
+
+  prepareHtmlSlideContent(contentNode, slideTitle = '') {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'reader-slide-content';
+    wrapper.appendChild(contentNode);
+
+    wrapper.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'));
+    wrapper.querySelectorAll('.reader-toc-fallback-anchor').forEach(element => element.remove());
+    this.removeDuplicateHtmlSlideHeading(wrapper, slideTitle);
+
+    return wrapper.textContent.trim() ? wrapper : null;
+  }
+
+  removeDuplicateHtmlSlideHeading(wrapper, slideTitle) {
+    const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
+    const expected = normalize(slideTitle);
+    if (!expected) return;
+
+    const firstTextElement = Array.from(wrapper.children)
+      .find(element => normalize(element.textContent));
+    if (!firstTextElement?.classList?.contains('reader-header')) return;
+    if (normalize(firstTextElement.textContent) === expected) {
+      firstTextElement.remove();
+    }
   }
 
   openImageLightbox(sourceImage) {
@@ -5311,6 +5673,7 @@ ${text}
   }
 
   deactivateReader() {
+    this.closeHtmlSlidesLightbox();
     this.closeImageLightbox();
     this.removeAIConsentDialog();
     const container = document.getElementById('web-reader-container');
@@ -5357,6 +5720,7 @@ ${text}
   shouldUseStoredTocSkeleton() {
     return !this.isOfflineMode &&
       this.currentFormatMode === 'AI' &&
+      this.isSimplifiedVersion === false &&
       Array.isArray(this.offlineTocSkeleton) &&
       this.offlineTocSkeleton.length > 0;
   }
@@ -5942,6 +6306,11 @@ ${text}
         e.preventDefault();
         this.closeImageLightbox();
       }
+      return;
+    }
+
+    if (this.htmlSlidesLightbox) {
+      this.handleHtmlSlidesKeyboard(e);
       return;
     }
 

@@ -260,6 +260,19 @@ test('keeps full table of contents outside AI original mode', () => {
   ]);
 });
 
+test('uses stored offline toc skeleton only for AI original mode', () => {
+  const reader = createParser();
+  reader.isOfflineMode = false;
+  reader.currentFormatMode = 'AI';
+  reader.offlineTocSkeleton = [{ text: '一、教務主任', level: 2 }];
+
+  reader.isSimplifiedVersion = false;
+  assert.equal(reader.shouldUseStoredTocSkeleton(), true);
+
+  reader.isSimplifiedVersion = true;
+  assert.equal(reader.shouldUseStoredTocSkeleton(), false);
+});
+
 test('rejects long paragraph-like headings as AI original department toc items', () => {
   const reader = createParser();
 
