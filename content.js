@@ -29,6 +29,8 @@ class WebReader {
     this.currentFormatMode = 'AI'; // 當前排版模式：'AI' 或 'Manual'
     this.isAIProcessing = false;
     this.aiProcessingStarted = false;
+    this.aiCacheVersion = 1;
+    this.aiCachePromptVersion = '2026-08-20-ai-original-classified-highlight-v2';
     this.imageLightbox = null;
     this.imageLightboxPreviousOverflow = '';
     this.imageLightboxState = null;
@@ -239,6 +241,15 @@ class WebReader {
 
     // 第一步：立即顯示離線排版
     this.showOfflineProcessingFirst(selectedText);
+
+    const restored = await this.tryRestoreAIProcessingCache();
+    if (restored) {
+      this.showStatusNotification('已載入上次 AI 處理快取，可直接切換精簡版、原文版或畫重點');
+      this.updateVersionButton();
+      this.updateHighlightButtonState();
+      this.updateAIProcessButtonState();
+      return;
+    }
 
     // 未取得明確同意前不呼叫任何 AI 供應商。
     this.showAIConsentDialog();
@@ -1575,6 +1586,7 @@ class WebReader {
         this.highlightData.original = this.originalHighlighted;
       }
 
+      await this.saveAIProcessingCache('second-stage');
       this.handleSecondStageComplete();
 
     } catch (error) {
@@ -1595,6 +1607,188 @@ class WebReader {
     }
 
     return this.cloneContentElement(source);
+  }
+
+  async tryRestoreAIProcessingCache() {
+    try {
+      const cacheKey = await this.getAIProcessingCacheKey();
+      if (!cacheKey) return false;
+
+      const storage = await this.getChromeStorage(['webReaderAICache']);
+      const cacheStore = storage.webReaderAICache || {};
+      const entry = cacheStore[cacheKey];
+      if (!this.isValidAIProcessingCacheEntry(entry, cacheKey)) return false;
+
+      this.simplifiedContent = this.deserializeCachedContentElement(entry.simplifiedContentHtml);
+      this.originalFormattedContent = this.deserializeCachedContentElement(entry.originalContentHtml);
+      this.simplifiedHighlighted = this.deserializeCachedContentElement(entry.simplifiedHighlightedHtml);
+      this.originalHighlighted = this.deserializeCachedContentElement(entry.originalHighlightedHtml);
+      this.highlightData = {};
+      if (this.simplifiedHighlighted) this.highlightData.simplified = this.simplifiedHighlighted;
+      if (this.originalHighlighted) this.highlightData.original = this.originalHighlighted;
+      if (Object.keys(this.highlightData).length === 0) this.highlightData = null;
+
+      this.aiProcessingStarted = false;
+      console.log('✅ 已載入 AI 處理快取:', {
+        cacheKey,
+        createdAt: entry.createdAt,
+        hasSimplified: !!this.simplifiedContent,
+        hasOriginal: !!this.originalFormattedContent,
+        hasHighlights: !!this.highlightData
+      });
+
+      return Boolean(this.simplifiedContent || this.originalFormattedContent || this.highlightData);
+    } catch (error) {
+      console.warn('讀取 AI 快取失敗，略過快取:', error);
+      return false;
+    }
+  }
+
+  async saveAIProcessingCache(reason = 'updated') {
+    try {
+      const cacheKey = await this.getAIProcessingCacheKey();
+      if (!cacheKey || !this.simplifiedContent) return;
+
+      const storage = await this.getChromeStorage(['webReaderAICache']);
+      const cacheStore = storage.webReaderAICache || {};
+      cacheStore[cacheKey] = {
+        cacheKey,
+        pageKey: this.getAIProcessingPageKey(),
+        contentHash: this.getAIProcessingContentHash(),
+        settingsHash: await this.getAIProcessingSettingsHash(),
+        cacheVersion: this.aiCacheVersion,
+        promptVersion: this.aiCachePromptVersion,
+        createdAt: new Date().toISOString(),
+        reason,
+        simplifiedContentHtml: this.serializeContentElement(this.simplifiedContent),
+        originalContentHtml: this.serializeContentElement(this.originalFormattedContent),
+        simplifiedHighlightedHtml: this.serializeContentElement(this.simplifiedHighlighted),
+        originalHighlightedHtml: this.serializeContentElement(this.originalHighlighted)
+      };
+
+      const prunedStore = this.pruneAIProcessingCacheStore(cacheStore, 5);
+      await this.setChromeStorage({ webReaderAICache: prunedStore });
+      console.log('💾 已儲存 AI 處理快取:', { cacheKey, reason });
+    } catch (error) {
+      console.warn('儲存 AI 快取失敗:', error);
+    }
+  }
+
+  isValidAIProcessingCacheEntry(entry, expectedCacheKey) {
+    return Boolean(
+      entry &&
+      entry.cacheKey === expectedCacheKey &&
+      entry.cacheVersion === this.aiCacheVersion &&
+      entry.promptVersion === this.aiCachePromptVersion &&
+      entry.simplifiedContentHtml &&
+      entry.originalContentHtml
+    );
+  }
+
+  pruneAIProcessingCacheStore(cacheStore, maxEntries = 5) {
+    const entries = Object.entries(cacheStore || {})
+      .sort((a, b) => String(b[1]?.createdAt || '').localeCompare(String(a[1]?.createdAt || '')));
+    return Object.fromEntries(entries.slice(0, maxEntries));
+  }
+
+  async getAIProcessingCacheKey() {
+    const pageKey = this.getAIProcessingPageKey();
+    const contentHash = this.getAIProcessingContentHash();
+    const settingsHash = await this.getAIProcessingSettingsHash();
+    if (!pageKey || !contentHash || !settingsHash) return null;
+    return [
+      'webreader-ai',
+      this.aiCacheVersion,
+      this.aiCachePromptVersion,
+      pageKey,
+      contentHash,
+      settingsHash
+    ].join('|');
+  }
+
+  getAIProcessingPageKey() {
+    if (typeof location === 'undefined') return '';
+
+    try {
+      const url = new URL(location.href);
+      if (url.hostname.toLowerCase() === 'esa.ntpc.edu.tw' &&
+          /\/web-module_list\/rest\/service\/main/i.test(url.pathname)) {
+        const id = url.searchParams.get('id') || '';
+        const typeId = url.searchParams.get('type_id') || '';
+        const hash = url.searchParams.get('hash') || location.hash || '';
+        return `${url.origin}${url.pathname}?id=${id}&type_id=${typeId}&hash=${hash}`;
+      }
+      return `${url.origin}${url.pathname}${url.search}`;
+    } catch (error) {
+      return location.href;
+    }
+  }
+
+  getAIProcessingContentHash() {
+    const offlineMarkdown = this.offlineFormattedContent
+      ? this.convertDOMToMarkdown(this.offlineFormattedContent)
+      : '';
+    return this.hashString([
+      this.normalizeCacheText(this.originalSelectedText),
+      this.normalizeCacheText(offlineMarkdown)
+    ].join('\n---webreader-offline---\n'));
+  }
+
+  async getAIProcessingSettingsHash() {
+    const settings = await this.getChromeStorage(['modelPriority', 'geminiModel', 'openaiModel']);
+    return this.hashString(JSON.stringify({
+      modelPriority: settings.modelPriority || ['gemini', 'openai', 'manual'],
+      geminiModel: settings.geminiModel || '',
+      openaiModel: settings.openaiModel || ''
+    }));
+  }
+
+  normalizeCacheText(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim();
+  }
+
+  hashString(text) {
+    let hash = 2166136261;
+    const value = String(text || '');
+    for (let i = 0; i < value.length; i++) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  serializeContentElement(contentElement) {
+    if (!contentElement) return '';
+    if (contentElement instanceof Element) return contentElement.outerHTML;
+    return '';
+  }
+
+  deserializeCachedContentElement(html) {
+    if (!html) return null;
+    const template = document.createElement('template');
+    template.innerHTML = String(html).trim();
+    const element = template.content.firstElementChild;
+    return element ? element.cloneNode(true) : null;
+  }
+
+  getChromeStorage(keys) {
+    return new Promise(resolve => {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+        resolve({});
+        return;
+      }
+      chrome.storage.local.get(keys, result => resolve(result || {}));
+    });
+  }
+
+  setChromeStorage(value) {
+    return new Promise(resolve => {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+        resolve();
+        return;
+      }
+      chrome.storage.local.set(value, () => resolve());
+    });
   }
 
   cloneContentElement(contentElement) {
@@ -1672,6 +1866,7 @@ class WebReader {
         this.highlightData.original = this.originalHighlighted;
       }
 
+      await this.saveAIProcessingCache('both-modes');
       console.log('🎉 兩種模式都處理完成（含重點數據）');
     } catch (error) {
       console.error('部分模式處理失敗:', error);

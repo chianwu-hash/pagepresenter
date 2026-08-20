@@ -142,6 +142,30 @@ test('detects ESA edit metadata lines for muted display and AI exclusion', () =>
   assert.equal(reader.isEsaMetadataText('1.114學年度王延生女士獎助學金'), false);
 });
 
+test('AI processing cache helpers keep stable hashes and prune old entries', () => {
+  const reader = createParser();
+  reader.aiCacheVersion = 1;
+  reader.aiCachePromptVersion = 'test-prompt';
+
+  assert.equal(reader.hashString('同一份內容'), reader.hashString('同一份內容'));
+  assert.notEqual(reader.hashString('同一份內容'), reader.hashString('另一份內容'));
+
+  const pruned = reader.pruneAIProcessingCacheStore({
+    a: { createdAt: '2026-08-20T00:00:00.000Z' },
+    b: { createdAt: '2026-08-20T00:00:02.000Z' },
+    c: { createdAt: '2026-08-20T00:00:01.000Z' }
+  }, 2);
+
+  assert.deepEqual(Object.keys(pruned), ['b', 'c']);
+  assert.equal(reader.isValidAIProcessingCacheEntry({
+    cacheKey: 'key',
+    cacheVersion: 1,
+    promptVersion: 'test-prompt',
+    simplifiedContentHtml: '<div></div>',
+    originalContentHtml: '<div></div>'
+  }, 'key'), true);
+});
+
 test('normalizes duplicated markdown heading markers from AI output', () => {
   const reader = createParser();
   const heading = reader.parseMarkdownHeadingLine('### # 1.1 教務處工作報告');
