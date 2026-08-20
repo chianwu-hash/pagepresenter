@@ -49,24 +49,32 @@ class WebReader {
 
     readerContainer.innerHTML = `
       <div id="web-reader-toolbar">
-        <div class="toolbar-left">
-          <button id="reader-close" title="關閉簡報模式">✕</button>
-          <button id="reader-fullscreen" title="全螢幕模式">⛶</button>
-          <span class="divider">|</span>
-          <button id="reader-font-decrease" title="縮小字體">A-</button>
-          <span id="reader-font-size">${this.fontSize}px</span>
-          <button id="reader-font-increase" title="放大字體">A+</button>
-          <span class="divider">|</span>
-          <button id="reader-contrast" title="高對比模式">◐</button>
-          <span class="divider">|</span>
-          <button id="reader-version-toggle" title="切換版本 (精簡版/原文版)">📄</button>
-          <button id="reader-highlight-mode" title="顯示或隱藏原文重點">✨</button>
-          <button id="reader-ai-process" title="送給 AI 處理">🤖 AI處理</button>
+        <div class="toolbar-left" aria-label="簡報與閱讀控制">
+          <div class="toolbar-group toolbar-group-presentation" aria-label="簡報控制">
+            <button id="reader-close" class="toolbar-button toolbar-button-icon" title="關閉簡報模式" aria-label="關閉簡報模式">×</button>
+            <button id="reader-fullscreen" class="toolbar-button toolbar-button-icon" title="全螢幕模式" aria-label="全螢幕模式">⛶</button>
+          </div>
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <div class="toolbar-group toolbar-group-reading" aria-label="閱讀設定">
+            <span class="toolbar-label">字級</span>
+            <button id="reader-font-decrease" class="toolbar-button" title="縮小字體" aria-label="縮小字體">A−</button>
+            <span id="reader-font-size" aria-live="polite">${this.fontSize}px</span>
+            <button id="reader-font-increase" class="toolbar-button" title="放大字體" aria-label="放大字體">A＋</button>
+            <button id="reader-contrast" class="toolbar-button" title="高對比模式" aria-label="高對比模式">對比</button>
+          </div>
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <div class="toolbar-group toolbar-group-mode" aria-label="內容模式">
+            <button id="reader-version-toggle" class="toolbar-button toolbar-mode-button" title="切換版本 (精簡版/原文版)">版本</button>
+            <button id="reader-highlight-mode" class="toolbar-button toolbar-mode-button" title="顯示或隱藏原文重點">重點</button>
+          </div>
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <div class="toolbar-group toolbar-group-ai" aria-label="AI 功能">
+            <button id="reader-ai-process" class="toolbar-button toolbar-ai-button" title="送給 AI 處理">AI 處理</button>
+          </div>
         </div>
-        <div class="toolbar-right">
+        <div class="toolbar-right" aria-label="目前狀態">
           <div id="reader-status-display">
             <span id="mode-status">精簡版</span>
-            <span class="divider">|</span>
             <span id="highlight-status">畫重點: 關</span>
           </div>
           <div id="reader-progress">
@@ -343,7 +351,7 @@ class WebReader {
       (!this.simplifiedContent || this.isAIProcessing);
     button.classList.toggle('reader-control-hidden', !shouldShow);
     button.disabled = this.isAIProcessing || this.aiProcessingStarted;
-    button.textContent = this.isAIProcessing ? '🤖 AI處理中' : '🤖 AI處理';
+    button.textContent = this.isAIProcessing ? 'AI 處理中' : 'AI 處理';
     button.title = this.isAIProcessing
       ? 'AI 處理中'
       : '將本次內容送給已設定的 AI 供應商處理';
@@ -5096,7 +5104,7 @@ ${text}
     // 更新版本切換按鈕
     if (versionToggleBtn) {
       versionToggleBtn.title = this.isSimplifiedVersion ? '當前：精簡版 (點擊切換到原文版)' : '當前：原文版 (點擊切換到精簡版)';
-      versionToggleBtn.textContent = this.isSimplifiedVersion ? '📄' : '📋';
+      versionToggleBtn.textContent = this.isSimplifiedVersion ? '精簡版' : '原文版';
       versionToggleBtn.classList.toggle('active', !this.isSimplifiedVersion);
     }
 
@@ -5104,6 +5112,7 @@ ${text}
     if (highlightModeBtn) {
       const highlightsVisible = this.isOfflineMode ? this.showSourceHighlights : this.isHighlightMode;
       highlightModeBtn.classList.toggle('active', highlightsVisible);
+      highlightModeBtn.textContent = highlightsVisible ? '重點開' : '重點關';
       highlightModeBtn.title = highlightsVisible ? '關閉 AI 畫重點模式' : 'AI畫重點模式';
     }
 
