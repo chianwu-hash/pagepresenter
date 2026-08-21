@@ -2444,20 +2444,25 @@ class WebReader {
       ? this.estimateTextBlockLayoutCost(this.getNormalizedContentText(caption), layout)
       : 0;
 
+    const imageCost = this.estimateImageLayoutCost(image, layout, layout.bodyWidth);
+    if (imageCost === layout.mediaCost) return imageCost + captionCost;
+    return imageCost + layout.mediaMarginCost + captionCost;
+  }
+
+  // styles.css 對投影片內的圖片是 max-width: 100%; height: auto，
+  // 但 .reader-image 另外壓了 max-height: 70vh，高圖不會照原始比例長高。
+  // availableWidth 讓表格儲存格能用自己較窄的欄寬換算。
+  estimateImageLayoutCost(image, layout = this.getHtmlSlideLayoutMetrics(), availableWidth = layout.bodyWidth) {
     const naturalWidth = Number(image?.dataset?.readerMediaWidth) || Number(image?.naturalWidth) || 0;
     const naturalHeight = Number(image?.dataset?.readerMediaHeight) || Number(image?.naturalHeight) || 0;
-    if (naturalWidth <= 0 || naturalHeight <= 0) {
-      return layout.mediaCost + captionCost;
-    }
+    if (naturalWidth <= 0 || naturalHeight <= 0) return layout.mediaCost;
 
-    // styles.css 對投影片內的圖片是 max-width: 100%; height: auto，
-    // 但 .reader-image 另外壓了 max-height: 70vh，高圖不會照原始比例長高。
-    const renderedWidth = Math.min(layout.bodyWidth, naturalWidth);
+    const renderedWidth = Math.min(availableWidth, naturalWidth);
     const renderedHeight = Math.min(
       naturalHeight * (renderedWidth / naturalWidth),
       layout.maxMediaHeight
     );
-    return Math.round(renderedHeight * layout.costPerPixel) + layout.mediaMarginCost + captionCost;
+    return Math.round(renderedHeight * layout.costPerPixel);
   }
 
   // 離線內容也可能用 .reader-table-row 這種非原生列，所以 rows 取不到時改用選擇器。
@@ -2476,12 +2481,20 @@ class WebReader {
       return Math.max(1, Math.ceil(units / layout.charsPerLine)) * layout.lineCost + layout.tableRowCost;
     }
 
+    // 儲存格裡的 <br> 一樣會強制換行。實測有維基版面表格的儲存格只有 134 字卻含 108 個
+    // <br>，整列高達 5212px；只看字數會低估到只剩零頭。
     const cellCapacity = Math.max(4, Math.floor(layout.charsPerLine / parts.length));
-    const lines = parts.reduce((max, cell) => Math.max(
-      max,
-      Math.ceil(this.estimateTextLayoutCost(this.getNormalizedContentText(cell)) / cellCapacity)
-    ), 1);
-    return lines * layout.lineCost + layout.tableRowCost;
+    const cellWidth = Math.max(80, Math.floor(layout.bodyWidth / parts.length));
+    const cellCost = cell => {
+      const lines = this.getTextBlockSegments(cell).reduce((sum, segment) =>
+        sum + Math.max(1, Math.ceil(this.estimateTextLayoutCost(segment) / cellCapacity)), 0);
+      // 儲存格裡的圖片會把列撐高，只算文字會嚴重低估。
+      const media = Array.from(cell?.querySelectorAll?.('img') || [])
+        .reduce((sum, image) => sum + this.estimateImageLayoutCost(image, layout, cellWidth), 0);
+      return Math.max(1, lines) * layout.lineCost + media;
+    };
+    return parts.reduce((max, cell) => Math.max(max, cellCost(cell)), layout.lineCost) +
+      layout.tableRowCost;
   }
 
   // \u5b57\u5bec\u55ae\u4f4d\u4ee5\u4e00\u500b\u5168\u5f62\u5b57\u70ba 1\u3002\u5168\u5f62\u6a19\u9ede\uff08\uff0c\u3002\uff1a\u3001\uff09\u8ddf\u6f22\u5b57\u4e00\u6a23\u5bec\uff0c

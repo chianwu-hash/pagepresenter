@@ -979,3 +979,71 @@ title covered by a span is not hoisted while safe ones still are.
 - The only fixtures above 1.00 overflow remain the two single-large-image ones at 1.03,
   which is the documented atomic-media case.
 - AI slide-plan is still not started, per the original scope note.
+
+---
+
+## S12: A Real Wikipedia Article, And Where Pagination Stops Being Able To Help
+
+ESA content is well-behaved compared with the open web, so the pipeline was pointed at a
+long zh.wikipedia.org article (新北市: 34,400 characters, 562 units, 112 lists, 49 figures,
+36 tables) through the real extension.
+
+### Two More Cost Gaps, Both General
+
+**`<br>` inside table cells.** S10 taught text blocks to count line breaks but table rows
+still derived their height from character count alone. One Wikipedia layout cell held 134
+characters and **108 `<br>`** and rendered 5212px tall; the row was costed as if it were a
+few lines. Table rows now use the same segmentation, so that row costs 4213 against a
+measured 2451px equivalent for its table — honest instead of an order of magnitude out.
+
+**Images inside table cells.** Row cost ignored media entirely, so a two-row infobox
+holding seven images measured 2600px and was costed at 569px. `estimateImageLayoutCost()`
+was factored out of the media path so a cell can scale an image by its own column width,
+and row cost is now `max(cell text lines + cell media)` across cells.
+
+Both matter for ESA too — meeting tables carry both line breaks and images.
+
+### What The Model Is Worth Now
+
+Measured across all 234 slides of that article, comparing predicted against rendered height:
+
+| | |
+|---|---|
+| median accuracy | **1.02** |
+| p10 / p90 | 0.93 / 1.17 |
+| slides that scroll | 29 of 234 (12%) |
+
+Of those 29:
+
+| cause | count |
+|---|---|
+| a **single block is taller than the whole slide** | 18 |
+| cost still under-estimated | 4 |
+| accumulated small error across blocks | 7 |
+
+The tallest single block on the page is **5397px — 8.6 screens**. No pagination can fix
+that: the plan contract never cuts inside an element, and that block is one table row.
+
+That is the honest boundary of this work. Wikipedia infoboxes and layout tables are one
+DOM element that renders taller than a screen; making them presentable would mean
+*unwrapping* them in the reader's offline formatter, which is a reader-side product
+decision, not a pagination one.
+
+### Target Content Is Unaffected
+
+The real ESA meeting is still 38 slides, 0 over budget, worst overflow 1.01, nothing
+scrolling, 149 units with nothing missing or reordered. All 14 fixtures keep their strategy,
+slide count and overflow.
+
+### Tests
+
+66 tests pass. Four new: `<br>` in a table cell raising the row height, images in a cell
+counted and scaled by column width, the unknown-dimensions fallback inside a cell, and
+`estimateImageLayoutCost()` scaling by available width while still honouring the 70vh cap.
+
+### If Someone Wants To Push Further
+
+- The 7 "accumulated error" slides would mostly disappear by lowering the 0.95 safety
+  factor in `getHtmlSlidePlanBudget()`, at the cost of slightly emptier slides everywhere.
+  It was left as measured on the target content, where the worst case is 1.01.
+- The 18 un-splittable blocks need a reader-side change, not a planner change.

@@ -1048,3 +1048,90 @@ test('全形標點會讓接近臨界的段落多算一行', () => {
   assert.equal(reader.estimateHtmlContentCost(p(exact)), layout.lineCost + layout.blockCost);
   assert.equal(reader.estimateHtmlContentCost(p(overflowing)), 2 * layout.lineCost + layout.blockCost);
 });
+
+// ---------------------------------------------------------------------------
+// 表格儲存格內部：<br> 與圖片（真實維基頁面量測後補上）
+// ---------------------------------------------------------------------------
+
+test('儲存格裡的 <br> 會撐高整列', () => {
+  const reader = createReader();
+  const layout = reader.getHtmlSlideLayoutMetrics();
+  const cellWithBreaks = new FakeElement({
+    tagName: 'td',
+    className: 'reader-table-cell',
+    children: Array.from({ length: 11 }, (_, index) =>
+      index % 2 === 0 ? new FakeText('甲') : brElement())
+  });
+  const flatCell = tableCell('td', '甲'.repeat(6));
+  const rowWithBreaks = new FakeElement({ tagName: 'tr', className: 'reader-table-row', children: [cellWithBreaks] });
+  const flatRow = tableRow([flatCell]);
+
+  // 6 個字分成 6 行 vs 6 個字排成 1 行
+  assert.equal(reader.estimateTableRowLayoutCost(flatRow), layout.lineCost + layout.tableRowCost);
+  assert.equal(reader.estimateTableRowLayoutCost(rowWithBreaks), 6 * layout.lineCost + layout.tableRowCost);
+});
+
+test('儲存格裡的圖片會算進列高，並用欄寬換算', () => {
+  const reader = createReader();
+  const layout = reader.getHtmlSlideLayoutMetrics();
+  const imageCell = columns => {
+    const image = new FakeElement({ tagName: 'img', className: 'reader-image' });
+    image.naturalWidth = 800;
+    image.naturalHeight = 600;
+    const cells = [new FakeElement({ tagName: 'td', className: 'reader-table-cell', children: [image] })];
+    for (let i = 1; i < columns; i++) cells.push(tableCell('td', '短'));
+    return new FakeElement({ tagName: 'tr', className: 'reader-table-row', children: cells });
+  };
+
+  const single = reader.estimateTableRowLayoutCost(imageCell(1));
+  const fourColumns = reader.estimateTableRowLayoutCost(imageCell(4));
+
+  assert.ok(single > layout.lineCost + layout.tableRowCost, '圖片必須讓列變貴');
+  assert.ok(single > fourColumns, '欄位愈多、欄寬愈窄，同一張圖佔的高度愈小');
+
+  // 單欄：800 寬塞得進 bodyWidth，高度 600 但仍受 70vh 上限夾制
+  assert.equal(
+    single,
+    layout.lineCost +
+      Math.round(Math.min(600, layout.maxMediaHeight) * layout.costPerPixel) +
+      layout.tableRowCost
+  );
+});
+
+test('讀不到尺寸的儲存格圖片退回保底成本', () => {
+  const reader = createReader();
+  const layout = reader.getHtmlSlideLayoutMetrics();
+  const image = new FakeElement({ tagName: 'img', className: 'reader-image' });
+  const row = new FakeElement({
+    tagName: 'tr',
+    className: 'reader-table-row',
+    children: [new FakeElement({ tagName: 'td', className: 'reader-table-cell', children: [image] })]
+  });
+
+  assert.equal(
+    reader.estimateTableRowLayoutCost(row),
+    layout.lineCost + layout.mediaCost + layout.tableRowCost
+  );
+});
+
+test('estimateImageLayoutCost 依可用寬度縮放並套用高度上限', () => {
+  const reader = createReader();
+  const layout = reader.getHtmlSlideLayoutMetrics();
+  const image = new FakeElement({ tagName: 'img' });
+  image.naturalWidth = 800;
+  image.naturalHeight = 600;
+
+  // 可用寬度 400 -> 縮成一半 -> 高 300
+  assert.equal(
+    reader.estimateImageLayoutCost(image, layout, 400),
+    Math.round(300 * layout.costPerPixel)
+  );
+  // 極高的圖仍被 70vh 夾住
+  const tall = new FakeElement({ tagName: 'img' });
+  tall.naturalWidth = 100;
+  tall.naturalHeight = 100000;
+  assert.equal(
+    reader.estimateImageLayoutCost(tall, layout, layout.bodyWidth),
+    Math.round(layout.maxMediaHeight * layout.costPerPixel)
+  );
+});
