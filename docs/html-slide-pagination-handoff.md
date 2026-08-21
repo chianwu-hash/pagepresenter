@@ -838,3 +838,89 @@ and the text fallback for an attachment section with no cards.
 The injected module and the opened lightbox live only in that tab; reloading it clears
 them. The tab still holds the reader DOM built by the installed extension, which is what
 makes this test repeatable without reloading the extension.
+
+---
+
+## S10: Verified On A Real ESA Meeting, Offline And AI
+
+The extension itself was reloaded from disk (it is loaded unpacked with dev mode on, id
+`bmkdmlcecdogpfnhbndkinaojdjgkdci`), then driven end to end on a live authenticated ESA
+meeting record: selection -> service worker `chrome.tabs.sendMessage` (the same path the
+context menu uses) -> reader activation -> the real toolbar button.
+
+Two things worth knowing for the next person:
+
+- Content scripts run in an isolated world, so `window.webReader` is invisible from the
+  page's main world. Probe the execution context named `網頁簡報器`, and probe it — a tab
+  can keep a stale isolated context from a previous document alongside the live one.
+- The ESA SPA does not restore a meeting record from its deep link after a full reload, so
+  reloading the tab loses the record. Reload the extension, then have a human navigate.
+
+### Results
+
+Real meeting, 六個處室, measured in Chrome at 1536x739:
+
+| | 離線排版 | AI 精簡版 |
+|---|---|---|
+| units | 149 | 84 |
+| slides | 38 | 15 |
+| strategy | `toc-plan-repaired` | `toc-plan-repaired` |
+| slides over budget | 0 | 0 |
+| worst measured overflow | 1.01 | **1.00** |
+| slides that scroll | **none** | **none** |
+| `possibleTextMismatch` | false | false |
+| unit coverage | 149 units, 0 missing, 0 out of order | 84 units, 0 missing, 0 out of order |
+
+For comparison the old range path on the same content produced 21 slides of which **8 were
+over budget**, the worst costing 3828 against a 1080 budget.
+
+Coverage is checked by concatenating every slide's title plus body and confirming each
+unit's text appears in it, in order. That is the strongest integrity check in this work and
+it passes on production content in both modes.
+
+### Three Cost Model Gaps The Real Page Exposed
+
+**1. `<br>` line breaks were invisible.** ESA writes whole checklists as one paragraph
+separated by `<br>`. One paragraph held 136 characters and 6 `<br>`: it renders as 7 lines
+(298px) but was costed as 3. `getTextBlockSegments()` now splits a block at its line breaks
+and each segment costs at least one line. Worst measured overflow on the real page dropped
+from **1.59 to 1.10**.
+
+**2. A `<br>` paragraph can exceed the budget on its own.** One 474-character paragraph
+with 12 breaks cost 1224 against a 1080 budget and could not be split, because the planner
+never cuts inside an element. `splitOversizedTextBlock()` now splits such a paragraph at
+its `<br>` boundaries into adjacent sibling paragraphs, and only when every `<br>` is a
+direct child — line breaks nested inside inline elements are left alone. That removed the
+last scrolling slide: **1.10 to 1.01**.
+
+**3. Character widths were wrong for Chinese.** Full-width punctuation（，。：、）is exactly
+as wide as a Han character but was counted as half. Latin was counted as one third of a
+Han character; working backwards from where real lines actually wrap, it must be at least
+0.4, so it is now 0.5. This is what closed the AI-version slides from 1.08 to 1.00.
+
+### AI Path
+
+Running AI was authorised for this test. The meeting text was sent to Gemini through the
+extension's normal consent dialog; no attachments were sent. The run produced a 精簡版 only
+(`originalFormattedContent` stayed null), and the version toggle switches
+離線版 -> AI 精簡版 -> back.
+
+The AI shape is flat `H3` / `P` / `OL` with `reader-restructured-content` and, notably,
+**no `<br>` at all** — it is list-heavy instead (13 lists, 0 tables, 3339 characters against
+the offline version's 7164). Both shapes now paginate cleanly, which is the point: the
+pipeline no longer depends on which formatter produced the DOM.
+
+### Fixtures
+
+All 13 fixtures keep their strategy, slide count and overflow through every change in this
+milestone. The only ones above 1.00 remain the two single-large-image fixtures at 1.03.
+
+### Tests
+
+62 tests pass. Eight new: `<br>` segmentation, `<br>` line counting, oversized `<br>`
+paragraph splitting with order preserved, the under-budget and nested-`<br>` refusals, a
+mixed-content fake-DOM helper check, full-width and latin character widths, and the
+line-wrap boundary case.
+
+`tests/helpers/fake-dom.cjs` grew text nodes (`FakeText`), `childNodes`, and `firstChild`,
+since `<br>` handling needs mixed inline content that the element-only fake could not model.

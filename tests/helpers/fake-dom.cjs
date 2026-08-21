@@ -21,6 +21,22 @@ class FakeClassList {
   }
 }
 
+class FakeText {
+  constructor(value = '') {
+    this.nodeType = 3;
+    this.nodeValue = String(value);
+    this.parentNode = null;
+  }
+
+  get textContent() {
+    return this.nodeValue;
+  }
+
+  cloneNode() {
+    return new FakeText(this.nodeValue);
+  }
+}
+
 class FakeElement {
   constructor({
     tagName = 'div',
@@ -34,8 +50,9 @@ class FakeElement {
     this.className = className;
     this.dataset = { ...dataset };
     this.attributes = { ...attributes };
+    this.nodeType = 1;
     this.parentNode = null;
-    this.children = [];
+    this._nodes = [];
     this._text = text;
     children.forEach(child => this.appendChild(child));
   }
@@ -44,28 +61,42 @@ class FakeElement {
     return new FakeClassList(this);
   }
 
+  // children 只含元素，childNodes 含文字節點，跟真實 DOM 一致。
+  get children() {
+    return this._nodes.filter(node => node.nodeType === 1);
+  }
+
+  get childNodes() {
+    return this._nodes.slice();
+  }
+
+  get firstChild() {
+    return this._nodes[0] || null;
+  }
+
   get textContent() {
-    return this.children.length
-      ? this.children.map(child => child.textContent).join('')
+    return this._nodes.length
+      ? this._nodes.map(child => child.textContent).join('')
       : this._text;
   }
 
   set textContent(value) {
-    this.children.forEach(child => { child.parentNode = null; });
-    this.children = [];
+    this._nodes.forEach(child => { child.parentNode = null; });
+    this._nodes = [];
     this._text = String(value);
   }
 
   get nextSibling() {
     if (!this.parentNode) return null;
-    const index = this.parentNode.children.indexOf(this);
-    return this.parentNode.children[index + 1] || null;
+    const index = this.parentNode._nodes.indexOf(this);
+    return this.parentNode._nodes[index + 1] || null;
   }
 
   get previousElementSibling() {
     if (!this.parentNode) return null;
-    const index = this.parentNode.children.indexOf(this);
-    return index > 0 ? this.parentNode.children[index - 1] : null;
+    const siblings = this.parentNode.children;
+    const index = siblings.indexOf(this);
+    return index > 0 ? siblings[index - 1] : null;
   }
 
   // HTMLTableElement.rows / HTMLTableRowElement.cells 的最小替身。
@@ -86,22 +117,22 @@ class FakeElement {
   appendChild(node) {
     node.parentNode?.removeChild(node);
     node.parentNode = this;
-    this.children.push(node);
+    this._nodes.push(node);
     return node;
   }
 
   insertBefore(node, reference) {
     node.parentNode?.removeChild(node);
     node.parentNode = this;
-    const index = reference ? this.children.indexOf(reference) : -1;
-    if (index < 0) this.children.push(node);
-    else this.children.splice(index, 0, node);
+    const index = reference ? this._nodes.indexOf(reference) : -1;
+    if (index < 0) this._nodes.push(node);
+    else this._nodes.splice(index, 0, node);
     return node;
   }
 
   removeChild(node) {
-    const index = this.children.indexOf(node);
-    if (index >= 0) this.children.splice(index, 1);
+    const index = this._nodes.indexOf(node);
+    if (index >= 0) this._nodes.splice(index, 1);
     node.parentNode = null;
     return node;
   }
@@ -118,7 +149,7 @@ class FakeElement {
       dataset: this.dataset,
       attributes: this.attributes
     });
-    if (deep) this.children.forEach(child => clone.appendChild(child.cloneNode(true)));
+    if (deep) this._nodes.forEach(child => clone.appendChild(child.cloneNode(true)));
     return clone;
   }
 
@@ -187,7 +218,11 @@ function textElement(tagName, className, text) {
   return new FakeElement({ tagName, className, text });
 }
 
-module.exports = { FakeElement, element, textElement };
+function text(value) {
+  return new FakeText(value);
+}
+
+module.exports = { FakeElement, FakeText, element, textElement, text };
 
 // content.js 產生區段標題時會呼叫 document.createElement，
 // vm sandbox 沒有 document，這裡給一個最小替身。

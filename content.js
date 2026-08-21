@@ -1414,6 +1414,7 @@ class WebReader {
     Array.from(root?.children || []).forEach(element => {
       this.splitOversizedContentGroup(element, maxCost);
       this.splitOversizedTableUnit(element, maxCost);
+      this.splitOversizedTextBlock(element, maxCost);
     });
     return root;
   }
@@ -1533,6 +1534,81 @@ class WebReader {
       anchor = clone;
       consumed += chunk.length;
     });
+
+    return chunks.length - 1;
+  }
+
+  // ESA 常把一整串條列寫成單一段落，用 <br> 斷行。這種段落過長時整張投影片就會爆版，
+  // 但它實質上就是清單，可以在 <br> 邊界安全切成相鄰段落。
+  splitOversizedTextBlock(element, maxCost = this.getHtmlSlidePlanBudget().maxCost) {
+    if (!this.elementMatches(element, 'p, .reader-paragraph, blockquote, .reader-quote')) return 0;
+    const totalBreaks = this.elementQueryCount(element, 'br');
+    if (totalBreaks === 0) return 0;
+    // 只處理直屬 <br>；藏在行內元素裡的斷行結構不明，寧可不動。
+    const directBreaks = Array.from(element.children || [])
+      .filter(child => String(child.tagName || '').toUpperCase() === 'BR').length;
+    if (directBreaks !== totalBreaks) return 0;
+    if (this.estimateHtmlContentCost(element) <= maxCost) return 0;
+
+    const groups = [];
+    let currentGroup = [];
+    Array.from(element.childNodes || []).forEach(node => {
+      if (node.nodeType === 1 && String(node.tagName || '').toUpperCase() === 'BR') {
+        groups.push(currentGroup);
+        currentGroup = [];
+        return;
+      }
+      currentGroup.push(node);
+    });
+    groups.push(currentGroup);
+    if (groups.length < 2) return 0;
+
+    const layout = this.getHtmlSlideLayoutMetrics();
+    const style = this.getHtmlSlideTextStyle(element, layout);
+    const charsPerLine = Math.max(4, Math.floor(layout.charsPerLine / style.scale));
+    const lineCost = Math.round(layout.lineCost * style.scale);
+    const groupCost = group => {
+      const units = this.estimateTextLayoutCost(group.map(node => node.textContent || '').join(''));
+      return Math.max(1, Math.ceil(units / charsPerLine)) * lineCost;
+    };
+
+    const chunks = [];
+    let currentChunk = [];
+    let currentCost = style.blockCost;
+    groups.forEach(group => {
+      const cost = groupCost(group);
+      if (currentChunk.length > 0 && currentCost + cost > maxCost) {
+        chunks.push(currentChunk);
+        currentChunk = [];
+        currentCost = style.blockCost;
+      }
+      currentChunk.push(group);
+      currentCost += cost;
+    });
+    if (currentChunk.length > 0) chunks.push(currentChunk);
+    if (chunks.length < 2) return 0;
+
+    const fill = (target, chunkGroups) => {
+      chunkGroups.forEach((group, index) => {
+        if (index > 0) {
+          const lineBreak = this.createHtmlSlideElement('br');
+          if (lineBreak) target.appendChild(lineBreak);
+        }
+        group.forEach(node => target.appendChild(node));
+      });
+    };
+
+    // 先把原段落清空，節點參照都還在 groups 裡，重新分配即可。
+    Array.from(element.childNodes || []).forEach(node => element.removeChild(node));
+    const parent = element.parentNode;
+    let anchorNode = element;
+    chunks.slice(1).forEach(chunkGroups => {
+      const clone = element.cloneNode(false);
+      fill(clone, chunkGroups);
+      parent?.insertBefore(clone, anchorNode.nextSibling);
+      anchorNode = clone;
+    });
+    fill(element, chunks[0]);
 
     return chunks.length - 1;
   }
@@ -2199,8 +2275,7 @@ class WebReader {
       .filter(child => this.isHtmlSlideLayoutBlock(child));
     if (blockChildren.length === 0) {
       const style = this.getHtmlSlideTextStyle(element, layout);
-      return this.estimateTextBlockLayoutCost(
-        this.getNormalizedContentText(element), layout, style.blockCost, style.scale);
+      return this.estimateTextElementLayoutCost(element, layout, style.blockCost, style.scale);
     }
 
     return blockChildren.reduce((sum, child) => sum + this.estimateHtmlLayoutCost(child), 0);
@@ -2242,6 +2317,56 @@ class WebReader {
       return { scale: 1, blockCost: layout.listItemCost };
     }
     return { scale: 1, blockCost: layout.blockCost };
+  }
+
+  // ESA 的離線段落大量使用 <br> 強制換行，只按字數估行會嚴重低估：
+  // 實測有段落 136 字卻含 6 個 <br>，實際佔 7 行而不是 3 行。
+  estimateTextElementLayoutCost(
+    element,
+    layout = this.getHtmlSlideLayoutMetrics(),
+    blockCost = layout.blockCost,
+    scale = 1
+  ) {
+    const segments = this.getTextBlockSegments(element);
+    if (segments.length <= 1) {
+      return this.estimateTextBlockLayoutCost(segments[0] || '', layout, blockCost, scale);
+    }
+
+    const charsPerLine = Math.max(4, Math.floor(layout.charsPerLine / scale));
+    const lines = segments.reduce((sum, segment) => {
+      const units = this.estimateTextLayoutCost(segment);
+      return sum + Math.max(1, Math.ceil(units / charsPerLine));
+    }, 0);
+    if (lines <= 0) return 0;
+    return Math.round(lines * layout.lineCost * scale) + blockCost;
+  }
+
+  // 依 <br> 把區塊文字切成實際會換行的片段。
+  getTextBlockSegments(element) {
+    if (this.elementQueryCount(element, 'br') === 0) {
+      return [this.getNormalizedContentText(element)];
+    }
+
+    const segments = [];
+    let current = '';
+    const visit = node => {
+      Array.from(node?.childNodes || []).forEach(child => {
+        if (child.nodeType === 3) {
+          current += child.nodeValue || '';
+          return;
+        }
+        if (child.nodeType !== 1) return;
+        if (String(child.tagName || '').toUpperCase() === 'BR') {
+          segments.push(current);
+          current = '';
+          return;
+        }
+        visit(child);
+      });
+    };
+    visit(element);
+    segments.push(current);
+    return segments.map(segment => String(segment).replace(/\s+/g, ' ').trim());
   }
 
   estimateTextBlockLayoutCost(
@@ -2339,12 +2464,19 @@ class WebReader {
     return lines * layout.lineCost + layout.tableRowCost;
   }
 
+  // \u5b57\u5bec\u55ae\u4f4d\u4ee5\u4e00\u500b\u5168\u5f62\u5b57\u70ba 1\u3002\u5168\u5f62\u6a19\u9ede\uff08\uff0c\u3002\uff1a\u3001\uff09\u8ddf\u6f22\u5b57\u4e00\u6a23\u5bec\uff0c
+  // \u4e4b\u524d\u7576\u6210\u534a\u5f62\u6703\u4f4e\u4f30\u63db\u884c\uff1b\u82f1\u6578\u539f\u672c\u7b97 1/3 \u4e5f\u592a\u5bec\u9b06\uff0c
+  // \u5f9e\u771f\u5be6\u9801\u9762\u7684\u63db\u884c\u4f4d\u7f6e\u53cd\u63a8\u81f3\u5c11\u8981 0.4\uff0c\u53d6 0.5\u3002
   estimateTextLayoutCost(text) {
     const normalized = String(text || '');
     const cjkCount = (normalized.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+    const fullWidthCount = (normalized.match(/[\u3000-\u303f\uff01-\uff60\uffe0-\uffe6]/g) || []).length;
     const latinCount = (normalized.match(/[A-Za-z0-9]/g) || []).length;
-    const otherCount = Math.max(0, normalized.replace(/\s/g, '').length - cjkCount - latinCount);
-    return cjkCount + (latinCount / 3) + (otherCount / 2);
+    const otherCount = Math.max(
+      0,
+      normalized.replace(/\s/g, '').length - cjkCount - fullWidthCount - latinCount
+    );
+    return cjkCount + fullWidthCount + (latinCount / 2) + (otherCount / 2);
   }
 
   getNormalizedContentText(element) {

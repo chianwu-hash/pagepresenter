@@ -885,3 +885,130 @@ test('沒有附件卡片的區塊退回文字估算', () => {
 
   assert.equal(reader.estimateHtmlContentCost(empty), 104);
 });
+
+// ---------------------------------------------------------------------------
+// <br> 強制換行：ESA 常把整串條列寫成一個段落
+// ---------------------------------------------------------------------------
+
+const { FakeText, text: textNode } = require('./helpers/fake-dom.cjs');
+
+function brElement() {
+  return new FakeElement({ tagName: 'br' });
+}
+
+function paragraphWithBreaks(segments, className = 'reader-paragraph') {
+  const children = [];
+  segments.forEach((segment, index) => {
+    if (index > 0) children.push(brElement());
+    children.push(new FakeText(segment));
+  });
+  return new FakeElement({ tagName: 'p', className, children });
+}
+
+test('getTextBlockSegments 依 <br> 切出實際換行的片段', () => {
+  const reader = createReader();
+  const paragraph = paragraphWithBreaks(['第一行', '第二行', '第三行']);
+
+  assert.deepEqual(plain(reader.getTextBlockSegments(paragraph)), ['第一行', '第二行', '第三行']);
+  // 沒有 <br> 時就是整段一片
+  const plainParagraph = new FakeElement({ tagName: 'p', className: 'reader-paragraph', text: '整段文字' });
+  assert.deepEqual(plain(reader.getTextBlockSegments(plainParagraph)), ['整段文字']);
+});
+
+test('<br> 會被算成換行，成本不再只看字數', () => {
+  const reader = createReader();
+  const layout = reader.getHtmlSlideLayoutMetrics();
+  // 三個短片段，字數加起來一行就放得下，但實際佔三行。
+  const broken = paragraphWithBreaks(['甲乙丙', '丁戊己', '庚辛壬']);
+  const flat = new FakeElement({ tagName: 'p', className: 'reader-paragraph', text: '甲乙丙丁戊己庚辛壬' });
+
+  assert.equal(reader.estimateHtmlContentCost(flat), layout.lineCost + layout.blockCost);
+  assert.equal(reader.estimateHtmlContentCost(broken), 3 * layout.lineCost + layout.blockCost);
+});
+
+test('過長的 <br> 段落被切成相鄰段落，文字順序不變', () => {
+  const reader = createReader();
+  const segments = Array.from({ length: 14 }, (_, index) =>
+    `第 ${index + 1} 項待辦事項請承辦人於期限內完成並回報辦理情形以利彙整追蹤`);
+  const paragraph = paragraphWithBreaks(segments);
+  const root = new FakeElement({ tagName: 'div', children: [paragraph] });
+  const budget = reader.getHtmlSlidePlanBudget().maxCost;
+
+  const added = reader.splitOversizedTextBlock(paragraph, budget);
+
+  assert.ok(added >= 1, '過長段落應被切開');
+  assert.equal(root.children.length, added + 1);
+  root.children.forEach(part => {
+    assert.equal(part.tagName, 'P');
+    assert.equal(part.className, 'reader-paragraph');
+    assert.ok(reader.estimateHtmlContentCost(part) <= budget);
+  });
+
+  const strip = value => String(value).replace(/\s+/g, '');
+  assert.equal(
+    strip(root.children.map(part => part.textContent).join('')),
+    strip(segments.join('')),
+    '切開後文字必須完全一致且不重排'
+  );
+});
+
+test('未超過預算的 <br> 段落不會被切開', () => {
+  const reader = createReader();
+  const paragraph = paragraphWithBreaks(['第一項', '第二項']);
+  const root = new FakeElement({ tagName: 'div', children: [paragraph] });
+
+  assert.equal(reader.splitOversizedTextBlock(paragraph), 0);
+  assert.equal(root.children.length, 1);
+});
+
+test('<br> 藏在行內元素裡時不切，結構不明寧可不動', () => {
+  const reader = createReader();
+  const segments = Array.from({ length: 14 }, (_, index) =>
+    `第 ${index + 1} 項待辦事項請承辦人於期限內完成並回報辦理情形以利彙整追蹤`);
+  const inner = new FakeElement({ tagName: 'span', className: 'reader-source-emphasis' });
+  segments.forEach((segment, index) => {
+    if (index > 0) inner.appendChild(brElement());
+    inner.appendChild(new FakeText(segment));
+  });
+  const paragraph = new FakeElement({ tagName: 'p', className: 'reader-paragraph', children: [inner] });
+  const root = new FakeElement({ tagName: 'div', children: [paragraph] });
+
+  assert.equal(reader.splitOversizedTextBlock(paragraph), 0);
+  assert.equal(root.children.length, 1);
+});
+
+test('textNode 輔助函式可用於組裝混合內容', () => {
+  const paragraph = new FakeElement({
+    tagName: 'p',
+    children: [textNode('前段'), brElement(), textNode('後段')]
+  });
+  assert.equal(paragraph.textContent, '前段後段');
+  assert.equal(paragraph.childNodes.length, 3);
+  assert.equal(paragraph.children.length, 1);
+});
+
+test('字寬單位：全形標點算一格，英數算半格', () => {
+  const reader = createReader();
+
+  assert.equal(reader.estimateTextLayoutCost('漢字'), 2);
+  // ，。：、 都是全形，跟漢字一樣寬
+  assert.equal(reader.estimateTextLayoutCost('，。：、'), 4);
+  assert.equal(reader.estimateTextLayoutCost('ABCD'), 2);
+  assert.equal(reader.estimateTextLayoutCost('1234'), 2);
+  // 空白不計
+  assert.equal(reader.estimateTextLayoutCost(' 漢 字 '), 2);
+  // 混合：3 漢字 + 2 全形標點 + 4 英數 = 3 + 2 + 2
+  assert.equal(reader.estimateTextLayoutCost('教務處：AB12，'), 3 + 2 + 2);
+});
+
+test('全形標點會讓接近臨界的段落多算一行', () => {
+  const reader = createReader();
+  const layout = reader.getHtmlSlideLayoutMetrics();
+  // 剛好塞滿一行的漢字，再加標點就會換行
+  const exact = '甲'.repeat(layout.charsPerLine);
+  const overflowing = '甲'.repeat(layout.charsPerLine) + '，';
+  const p = text => new FakeElement({ tagName: 'p', className: 'reader-paragraph', text });
+
+  assert.equal(reader.estimateHtmlContentCost(p(exact)), layout.lineCost + layout.blockCost);
+  assert.equal(reader.estimateHtmlContentCost(p(overflowing)), 2 * layout.lineCost + layout.blockCost);
+});
