@@ -1,5 +1,10 @@
 # PagePresenter HTML Slide Pagination Handoff
 
+> **Picking this up fresh?** Read `html-slide-pagination-codex-handoff.md` first — it is the
+> orientation for what changed after S0–S3 and why. This file is the full chronological
+> record; the sections above S4 describe the original S0–S3 state and are marked where they
+> no longer match the code.
+
 This handoff is for continuing the PagePresenter "轉成 HTML 簡報" pagination-quality work.
 
 ## Current Workspace State
