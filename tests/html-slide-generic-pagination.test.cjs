@@ -791,3 +791,97 @@ test('只有一個續頁時不加編號', () => {
   assert.equal(reader.getContinuedHtmlSlideTitle('一、教務處', 2, 3), '一、教務處（續 2）');
   assert.equal(reader.getContinuedHtmlSlideTitle(null, 1, 1), null);
 });
+
+// ---------------------------------------------------------------------------
+// 真實 ESA 頁面量測後補上的兩個成本規則
+// ---------------------------------------------------------------------------
+
+test('標題比同字數的內文貴，metadata 比較便宜（字級不同）', () => {
+  const reader = createReader();
+  const text = '甲'.repeat(30);
+  const heading = new FakeElement({ tagName: 'h2', className: 'reader-header reader-h2', text });
+  const subheading = new FakeElement({ tagName: 'h3', className: 'reader-h3 reader-esa-subheading', text });
+  const paragraph = new FakeElement({ tagName: 'p', className: 'reader-paragraph', text });
+  const metadata = new FakeElement({
+    tagName: 'p',
+    className: 'reader-paragraph reader-esa-metadata',
+    text
+  });
+
+  const headingCost = reader.estimateHtmlContentCost(heading);
+  const subheadingCost = reader.estimateHtmlContentCost(subheading);
+  const paragraphCost = reader.estimateHtmlContentCost(paragraph);
+  const metadataCost = reader.estimateHtmlContentCost(metadata);
+
+  assert.ok(headingCost > subheadingCost, `${headingCost} > ${subheadingCost}`);
+  assert.ok(subheadingCost > paragraphCost, `${subheadingCost} > ${paragraphCost}`);
+  assert.ok(metadataCost < paragraphCost, `${metadataCost} < ${paragraphCost}`);
+  // 34px 標題：每行放得下的字變少、行高變高，再加上標題自己的邊界。
+  assert.equal(headingCost, 135);
+  assert.equal(metadataCost, 81);
+});
+
+test('大字級標題換行更早，長標題會多算一行', () => {
+  const reader = createReader();
+  const layout = reader.getHtmlSlideLayoutMetrics();
+  const headingCharsPerLine = Math.floor(layout.charsPerLine / layout.headingScale);
+  const text = '甲'.repeat(headingCharsPerLine + 1);
+
+  const heading = new FakeElement({ tagName: 'h2', className: 'reader-header reader-h2', text });
+  const paragraph = new FakeElement({ tagName: 'p', className: 'reader-paragraph', text });
+
+  // 同一段文字，內文只要一行，標題已經要兩行。
+  assert.equal(reader.estimateHtmlContentCost(paragraph), layout.lineCost + layout.blockCost);
+  assert.equal(
+    reader.estimateHtmlContentCost(heading),
+    Math.round(2 * layout.lineCost * layout.headingScale) + layout.headingCost
+  );
+});
+
+test('附件區塊依卡片數與格線欄數估算，不是照字數', () => {
+  const reader = createReader();
+  const layout = reader.getHtmlSlideLayoutMetrics();
+  const createAttachments = cardCount => new FakeElement({
+    tagName: 'section',
+    className: 'reader-attachments',
+    children: [
+      new FakeElement({ tagName: 'div', className: 'reader-attachments-heading', text: '附件' }),
+      new FakeElement({
+        tagName: 'div',
+        className: 'reader-attachments-list',
+        children: Array.from({ length: cardCount }, (_, index) => new FakeElement({
+          tagName: 'button',
+          className: 'reader-attachment-card',
+          text: `附件檔案 ${index + 1}`
+        }))
+      })
+    ]
+  });
+
+  const columns = Math.max(1, Math.floor((layout.bodyWidth - 40) / 360));
+  const expected = cardCount => {
+    const rows = Math.ceil(cardCount / columns);
+    return Math.round((100 + 47 + rows * 92 + Math.max(0, rows - 1) * 14) * layout.costPerPixel);
+  };
+
+  assert.equal(reader.estimateHtmlContentCost(createAttachments(1)), expected(1));
+  assert.equal(reader.estimateHtmlContentCost(createAttachments(columns + 1)), expected(columns + 1));
+  assert.ok(
+    reader.estimateHtmlContentCost(createAttachments(columns + 1)) >
+    reader.estimateHtmlContentCost(createAttachments(1)),
+    '多一列卡片就要多算一列高度'
+  );
+  // 短檔名的一張卡片，照字數只會算一行；實測是 92px 的卡片。
+  assert.ok(reader.estimateHtmlContentCost(createAttachments(1)) > 400);
+});
+
+test('沒有附件卡片的區塊退回文字估算', () => {
+  const reader = createReader();
+  const empty = new FakeElement({
+    tagName: 'section',
+    className: 'reader-attachments',
+    text: '本案無附件'
+  });
+
+  assert.equal(reader.estimateHtmlContentCost(empty), 104);
+});

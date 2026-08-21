@@ -750,3 +750,91 @@ with numbering, and the numbering rule itself.
   measurable dimensions).
 - Nothing here calls AI. `aiCachePromptVersion` is untouched and no rendered slide HTML is
   cached.
+
+---
+
+## S9: Verified On A Real ESA Meeting Record
+
+### How
+
+The extension installed in the work browser is the shipping 1.1.0 build, so it does not
+contain any of this work. Instead the current `content.js` was injected into a live,
+already-authenticated ESA meeting page over CDP:
+
+```js
+window.__pagerModule = { exports: {} };
+(function (module, chrome) { /* content.js */ })(window.__pagerModule, undefined);
+```
+
+Passing `chrome` as `undefined` shadows the global, so the extension bootstrap at the
+bottom of the file is skipped and only the class is exported. A detached instance then ran
+the real flow against the reader DOM that the shipping extension had already built:
+`processHeaders(content)` -> `getHtmlSlideTocEntries()` -> `buildHtmlSlidesFromCurrentContent()`.
+
+Both reader modes were exercised (離線排版 and AI 原文版); they produced identical plans
+because the page's TOC resolves to the same six 處室 either way.
+
+No login was automated and nothing on ESA was written to. Only structural metrics were
+collected — slide counts, costs, overflow ratios and section titles.
+
+### The Page
+
+6 TOC entries (六位主任), 55 content units, `#reader-main-content` with a single
+`.reader-restructured-content.reader-offline-content` child — the same one-child shape that
+made S4's fix necessary, confirmed on production content.
+
+### Result
+
+| | Range path (before) | plan path (after) |
+|---|---|---|
+| strategy | `toc-fallback` | `toc-plan-repaired` |
+| slides | 6 | 14 |
+| slide costs | 2244, 873, **2399**, 965, 517, **1940** | all 175-1065, budget 1080 |
+| slides over budget | 3 of 6 | 0 |
+| worst measured overflow | ~2.2 screens | **1.00 — nothing scrolls** |
+| `possibleTextMismatch` | false | false |
+
+Side navigation reads:
+
+```text
+一、教務主任 / 1.2 文書組記錄 / 一、教務主任（續 1）/ 一、教務主任（續 2）/
+二、學務主任 / 三、總務主任 / 附件 1 份 / 3.2 文書組記錄 / 三、總務主任（續）/
+四、輔導主任 / 4.2 文書組記錄 / 五、幼兒園主任 / 六、人事主任 / 六、人事主任（續）
+```
+
+### Two Cost Model Gaps The Real Page Exposed
+
+Both were invisible in the synthetic fixtures.
+
+**1. Headings are not body text.** styles.css renders `.reader-h1/.reader-h2` at 34px and
+`.reader-h3/.reader-esa-subheading` at 30px inside a slide, while `.reader-esa-metadata` is
+20px. The model charged every one of them at the 28px body rate, so heading-heavy sections
+were under-costed. `getHtmlSlideTextStyle()` now returns a font scale per element and
+`estimateTextBlockLayoutCost()` applies it to both the line height and the characters that
+fit on a line. Verified against the page: a 20px metadata paragraph now costs 81, matching
+its measured 30px render.
+
+**2. Attachment cards are components, not text.** A `.reader-attachments` section with one
+card and a 42-character filename rendered at 238px but was costed as 208 (about 111px).
+`estimateAttachmentsLayoutCost()` now models the actual CSS: card `min-height: 92px`, grid
+`gap: 14px`, column width floor of 360px, section `margin 28x2 + padding 20x2 + border 2x2`,
+and a 47px heading row. The same section now costs 449 against a measured 447.
+
+After both fixes, every slide on the real page measures exactly 1.00.
+
+### Fixtures Unaffected
+
+All 13 fixtures keep their previous strategy, slide count and overflow. The only fixtures
+above 1.00 remain the two single-large-image ones at 1.03.
+
+### Tests
+
+54 tests pass. Four new: heading vs paragraph vs metadata cost ordering with pinned values,
+earlier line wrapping at larger font sizes, attachment cost by card count and grid columns,
+and the text fallback for an attachment section with no cards.
+
+### Note For Whoever Runs This Next
+
+The injected module and the opened lightbox live only in that tab; reloading it clears
+them. The tab still holds the reader DOM built by the installed extension, which is what
+makes this test repeatable without reloading the extension.

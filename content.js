@@ -1924,14 +1924,19 @@ class WebReader {
       // 被拆開的續頁沿用原標題加「（續）」，
       // 否則側邊導覽會在處室之間插進一排看不出歸屬的「第 N 頁」。
       const baseTitle = slide.title || repaired.slides[0]?.title || null;
-      const continuationCount = repaired.slides.length - 1;
-      repairedSlides.push(...repaired.slides.map((part, index) => ({
-        ...part,
-        title: part.title ||
-          (index === 0
-            ? baseTitle
-            : this.getContinuedHtmlSlideTitle(baseTitle, index, continuationCount))
-      })));
+      // 續頁自己有小標（例如「1.2 文書組記錄」）就沿用，比「（續 N）」好認；
+      // 編號只算真正沒有標題的那幾頁，否則序號會跳號。
+      const generatedTotal = repaired.slides.slice(1).filter(part => !part.title).length;
+      let generatedIndex = 0;
+      repairedSlides.push(...repaired.slides.map((part, index) => {
+        if (part.title) return { ...part };
+        if (index === 0) return { ...part, title: baseTitle };
+        generatedIndex++;
+        return {
+          ...part,
+          title: this.getContinuedHtmlSlideTitle(baseTitle, generatedIndex, generatedTotal)
+        };
+      }));
     });
 
     return {
@@ -2142,10 +2147,18 @@ class WebReader {
     const lineCost = 80;
     const costPerPixel = lineCost / (fontSize * 1.52);
     const pixelCost = pixels => Math.round(pixels * costPerPixel);
+    // styles.css 讓投影片內的標題比內文大，字級不同，行高與每行字數都要跟著換算。
+    const headingFontSize = isCompact ? 26 : 34;
+    const subheadingFontSize = isCompact ? 24 : 30;
+    const metadataFontSize = 20;
 
     return {
       lineCost,
       blockCost: pixelCost(13),
+      headingCost: pixelCost(20),
+      headingScale: headingFontSize / fontSize,
+      subheadingScale: subheadingFontSize / fontSize,
+      metadataScale: metadataFontSize / fontSize,
       listItemCost: pixelCost(8),
       tableRowCost: pixelCost(20),
       tableCost: pixelCost(18),
@@ -2172,6 +2185,9 @@ class WebReader {
     if (this.elementMatches(element, 'img, video, audio, iframe, figure, .reader-media')) {
       return this.estimateMediaLayoutCost(element, layout);
     }
+    if (this.elementMatches(element, '.reader-attachments')) {
+      return this.estimateAttachmentsLayoutCost(element, layout);
+    }
     if (this.elementMatches(element, 'table, .reader-table')) {
       return this.estimateTableLayoutCost(element, layout);
     }
@@ -2182,10 +2198,9 @@ class WebReader {
     const blockChildren = Array.from(element.children || [])
       .filter(child => this.isHtmlSlideLayoutBlock(child));
     if (blockChildren.length === 0) {
-      const blockCost = this.elementMatches(element, 'li, .reader-list-item')
-        ? layout.listItemCost
-        : layout.blockCost;
-      return this.estimateTextBlockLayoutCost(this.getNormalizedContentText(element), layout, blockCost);
+      const style = this.getHtmlSlideTextStyle(element, layout);
+      return this.estimateTextBlockLayoutCost(
+        this.getNormalizedContentText(element), layout, style.blockCost, style.scale);
     }
 
     return blockChildren.reduce((sum, child) => sum + this.estimateHtmlLayoutCost(child), 0);
@@ -2197,10 +2212,49 @@ class WebReader {
       'h1, h2, h3, h4, h5, h6, ul, ol, li, dl, table, tr, figure, img, video, audio, iframe');
   }
 
-  estimateTextBlockLayoutCost(text, layout = this.getHtmlSlideLayoutMetrics(), blockCost = layout.blockCost) {
+  // 附件卡片是固定高度的格線元件，不是文字，照字數估會嚴重低估。
+  // 常數取自 styles.css：卡片 min-height 92、格線 gap 14、欄寬下限 360、
+  // 區塊 margin 28x2 + padding 20x2 + border 2x2 = 100、標題列 33 + 14。
+  estimateAttachmentsLayoutCost(element, layout = this.getHtmlSlideLayoutMetrics()) {
+    const cards = this.elementQueryCount(element, '.reader-attachment-card');
+    if (cards === 0) {
+      return this.estimateTextBlockLayoutCost(this.getNormalizedContentText(element), layout);
+    }
+
+    const columns = Math.max(1, Math.floor((layout.bodyWidth - 40) / 360));
+    const rows = Math.ceil(cards / columns);
+    const listPixels = rows * 92 + Math.max(0, rows - 1) * 14;
+    const headingPixels = this.elementQueryCount(element, '.reader-attachments-heading') > 0 ? 47 : 0;
+    return Math.round((100 + headingPixels + listPixels) * layout.costPerPixel);
+  }
+
+  getHtmlSlideTextStyle(element, layout) {
+    if (this.elementMatches(element, 'h1, h2, .reader-h1, .reader-h2')) {
+      return { scale: layout.headingScale, blockCost: layout.headingCost };
+    }
+    if (this.elementMatches(element, 'h3, h4, h5, h6, .reader-h3, .reader-esa-subheading')) {
+      return { scale: layout.subheadingScale, blockCost: layout.headingCost };
+    }
+    if (this.elementMatches(element, '.reader-esa-metadata')) {
+      return { scale: layout.metadataScale, blockCost: layout.blockCost };
+    }
+    if (this.elementMatches(element, 'li, .reader-list-item')) {
+      return { scale: 1, blockCost: layout.listItemCost };
+    }
+    return { scale: 1, blockCost: layout.blockCost };
+  }
+
+  estimateTextBlockLayoutCost(
+    text,
+    layout = this.getHtmlSlideLayoutMetrics(),
+    blockCost = layout.blockCost,
+    scale = 1
+  ) {
     const units = this.estimateTextLayoutCost(text);
     if (units <= 0) return 0;
-    return Math.ceil(units / layout.charsPerLine) * layout.lineCost + blockCost;
+    // 字級愈大，一行放得下的字愈少、行高也愈高。
+    const charsPerLine = Math.max(4, Math.floor(layout.charsPerLine / scale));
+    return Math.round(Math.ceil(units / charsPerLine) * layout.lineCost * scale) + blockCost;
   }
 
   estimateTableLayoutCost(element, layout = this.getHtmlSlideLayoutMetrics()) {
