@@ -10,6 +10,7 @@
   --reader-toolbar-bg: #f8f9fa;
   --reader-sidebar-bg: #f1f3f4;
   --reader-surface-muted: #f8fafc;
+  --reader-muted-text-color: #6b7280;
   --reader-control-bg: #ffffff;
   --reader-control-hover: #eef6ff;
   --reader-control-active: #e0f2fe;
@@ -393,7 +394,8 @@ body.reader-mode {
   display: flex !important;
 }
 
-.web-reader-active.high-contrast {
+.web-reader-active.high-contrast,
+.reader-slides-lightbox.high-contrast {
   --reader-bg-color: #000000;
   --reader-text-color: #ffffff;
   --reader-header-color: #ffff99;
@@ -402,6 +404,7 @@ body.reader-mode {
   --reader-sidebar-bg: #2d2d2d;
   --reader-border-color: #555555;
   --reader-surface-muted: #101010;
+  --reader-muted-text-color: #b0bec5;
   --reader-control-bg: #333333;
   --reader-control-hover: #555555;
   --reader-control-active: #ffff99;
@@ -409,7 +412,8 @@ body.reader-mode {
   --reader-accent-color: #ffff99;
 }
 
-.web-reader-active.theme-soft {
+.web-reader-active.theme-soft,
+.reader-slides-lightbox.theme-soft {
   --reader-bg-color: #fffaf0;
   --reader-text-color: #263238;
   --reader-header-color: #102a36;
@@ -418,6 +422,7 @@ body.reader-mode {
   --reader-toolbar-bg: #f7efdf;
   --reader-sidebar-bg: #f2eadb;
   --reader-surface-muted: #fbf4e6;
+  --reader-muted-text-color: #7b8794;
   --reader-control-bg: #fffaf0;
   --reader-control-hover: #f3ead7;
   --reader-control-active: #e7dcc7;
@@ -1425,9 +1430,9 @@ body.reader-mode {
   display: none !important;
   grid-template-rows: auto 1fr !important;
   overflow: hidden !important;
-  border: 1px solid rgba(203, 213, 225, 0.95) !important;
+  border: 1px solid var(--reader-border-color) !important;
   border-radius: 8px !important;
-  background: #fffaf0 !important;
+  background: var(--reader-bg-color) !important;
   box-shadow: 0 24px 72px rgba(0, 0, 0, 0.32) !important;
 }
 
@@ -1441,13 +1446,13 @@ body.reader-mode {
   justify-content: space-between !important;
   gap: 18px !important;
   padding: 16px 28px 12px !important;
-  border-bottom: 1px solid #d9e2ec !important;
-  background: #ffffff !important;
+  border-bottom: 1px solid var(--reader-border-color) !important;
+  background: var(--reader-control-bg) !important;
 }
 
 .reader-slide-title {
   margin: 0 !important;
-  color: #102a43 !important;
+  color: var(--reader-header-color) !important;
   font-size: 30px !important;
   line-height: 1.25 !important;
   font-weight: 900 !important;
@@ -1459,8 +1464,8 @@ body.reader-mode {
   min-width: 70px !important;
   padding: 7px 10px !important;
   border-radius: 999px !important;
-  background: #e0f2fe !important;
-  color: #075985 !important;
+  background: var(--reader-control-active) !important;
+  color: var(--reader-link-color) !important;
   font-size: 15px !important;
   font-weight: 900 !important;
   text-align: center !important;
@@ -1470,7 +1475,7 @@ body.reader-mode {
 .reader-slide-body {
   overflow: auto !important;
   padding: 20px 30px 26px !important;
-  color: #1f2933 !important;
+  color: var(--reader-text-color) !important;
 }
 
 .reader-slide-body *,
@@ -1479,7 +1484,7 @@ body.reader-mode {
   max-width: 100% !important;
   overflow-wrap: break-word !important;
   word-wrap: break-word !important;
-  color: #1f2933 !important;
+  color: var(--reader-text-color) !important;
   font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif !important;
   font-size: 28px !important;
   line-height: 1.52 !important;
@@ -1488,7 +1493,7 @@ body.reader-mode {
 
 .reader-slide-body .reader-header {
   margin: 20px 0 16px !important;
-  color: #102a43 !important;
+  color: var(--reader-header-color) !important;
 }
 
 .reader-slide-body .reader-h1,
@@ -1502,7 +1507,7 @@ body.reader-mode {
 }
 
 .reader-slide-body .reader-esa-metadata {
-  color: #6b7280 !important;
+  color: var(--reader-muted-text-color) !important;
   font-size: 20px !important;
 }
 
@@ -1515,13 +1520,13 @@ body.reader-mode {
 .reader-slide-body th,
 .reader-slide-body td {
   padding: 10px 12px !important;
-  border: 1px solid #cbd5e1 !important;
+  border: 1px solid var(--reader-border-color) !important;
   text-align: left !important;
 }
 
 .reader-slide-body th {
-  background: #e0f2fe !important;
-  color: #075985 !important;
+  background: var(--reader-control-active) !important;
+  color: var(--reader-link-color) !important;
 }
 
 .reader-slide-body img {

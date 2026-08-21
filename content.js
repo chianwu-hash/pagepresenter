@@ -1016,6 +1016,7 @@ class WebReader {
     backdrop.setAttribute('aria-modal', 'true');
     backdrop.setAttribute('aria-label', 'HTML 簡報播放');
     backdrop.tabIndex = -1;
+    this.applyHtmlSlidesTheme(backdrop);
 
     const topbar = document.createElement('div');
     topbar.className = 'reader-slides-topbar';
@@ -1149,6 +1150,13 @@ class WebReader {
     this.htmlSlidesState = null;
     document.body.style.overflow = this.htmlSlidesPreviousOverflow || '';
     this.htmlSlidesPreviousOverflow = '';
+  }
+
+  applyHtmlSlidesTheme(target = this.htmlSlidesLightbox) {
+    if (!target) return;
+    target.classList.remove('theme-formal', 'theme-soft', 'theme-high-contrast', 'high-contrast');
+    target.classList.add(`theme-${this.normalizeReaderTheme(this.readerTheme)}`);
+    target.classList.toggle('high-contrast', this.readerTheme === 'high-contrast');
   }
 
   moveHtmlSlideBy(delta) {
@@ -6046,6 +6054,8 @@ ${text}
     if (themeSelect) {
       themeSelect.value = this.readerTheme;
     }
+
+    this.applyHtmlSlidesTheme();
   }
 
   setReaderTheme(theme) {
