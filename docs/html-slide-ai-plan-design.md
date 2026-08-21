@@ -1,8 +1,9 @@
 # AI Slide Plan — Design
 
-Status: **design. Recommendation (3) at the bottom is now implemented** — see S15 in
-`html-slide-pagination-handoff.md`. The AI call itself is still not built. Written after the
-pagination quality work landed (S0–S14).
+Status: **implemented.** Recommendation (3) shipped as S15 and the AI call itself as S16 in
+`html-slide-pagination-handoff.md`. Written after the pagination quality work landed
+(S0–S14); the sections below are the design as approved, with implementation notes marked
+inline where reality differed.
 
 ## Why Now
 
@@ -35,14 +36,23 @@ Carried over from the original scope note and unchanged:
 ```text
 startAIProcessing()
   └─ existing content run  ────────────► simplifiedContent / originalFormattedContent
-  └─ NEW: requestHtmlSlidePlan()  ─────► slide boundaries, own cache entry
+  └─ requestHtmlSlidePlan()  ──────────► slide boundaries, own cache entry
 
 openHtmlSlidesLightbox()
+  └─ primeCachedHtmlSlidePlan()   (reads cache only, never calls AI)
   └─ buildHtmlSlidesFromCurrentContent()
-       ├─ TOC page   → createTocHtmlSlidePlan()      (unchanged)
-       ├─ cached AI plan for this content?  → use it
-       └─ otherwise  → createHeuristicHtmlSlidePlan() (unchanged)
+       ├─ TOC page   → AI plan if it keeps every TOC boundary → toc-ai-plan
+       │               otherwise createTocHtmlSlidePlan()
+       └─ no TOC     → AI plan if structurally valid → ai-plan
+                       otherwise createHeuristicHtmlSlidePlan()
 ```
+
+**Implementation note.** The original diagram left TOC pages untouched, which would have
+made the feature inert — every real ESA meeting has a TOC. Instead the AI plan is accepted
+on TOC pages too, but only if it keeps **every** TOC section start as a slide start
+(`isHtmlSlidePlanRespectingStarts()`). The model may subdivide inside a section and retitle
+freely; it can never move or swallow a boundary the user sees in the side navigation. The
+required starts are handed to the model in the request as `requiredStarts`.
 
 The plan request is a **separate Gemini call**, not a change to the existing prompt.
 Folding it into the existing prompt would change `aiCachePromptVersion`, which is
@@ -148,6 +158,13 @@ It does mean one more request per AI run, so:
 - It should be skippable, so a user who only wants formatted content is not paying for it.
 - The existing 16,000-token output cap is far more than a boundary list needs; the request
   should ask for a much smaller cap so a runaway response cannot burn budget.
+
+**Implementation note — this one was wrong.** A small cap (2,000) truncated the response
+before any JSON appeared, because the model spends output budget on reasoning first. Two
+changes were needed: `background.js` now accepts an allow-listed `responseMimeType` so the
+request can ask for `application/json`, and the cap was raised rather than lowered. The
+parser also stopped trusting the response to be pure JSON — it brace-matches the object
+containing `"slides"` out of surrounding prose.
 
 ## How To Judge It
 

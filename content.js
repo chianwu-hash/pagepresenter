@@ -31,6 +31,9 @@ class WebReader {
     this.aiProcessingStarted = false;
     this.aiCacheVersion = 1;
     this.aiCachePromptVersion = '2026-08-20-ai-original-classified-highlight-v2';
+    // AI 分頁建議自己的版本，跟 aiCachePromptVersion 完全獨立，改動不會讓 AI 內容快取失效。
+    this.htmlSlidePlanVersion = '2026-08-21-slide-plan-v1';
+    this.htmlSlidePlanEnabled = true;
     this.imageLightbox = null;
     this.imageLightboxPreviousOverflow = '';
     this.imageLightboxState = null;
@@ -360,6 +363,8 @@ class WebReader {
     try {
       await this.processFirstStage(this.originalSelectedText);
       await this.handleFirstStageComplete();
+      // 分頁建議是加分項：失敗不影響已經拿到的排版內容。
+      await this.requestHtmlSlidePlan('ai-run');
     } finally {
       this.isAIProcessing = false;
       if (!this.simplifiedContent) {
@@ -994,6 +999,8 @@ class WebReader {
   }
 
   openHtmlSlidesLightbox() {
+    // 只讀快取，絕不在開燈箱時呼叫 AI。
+    this.primeCachedHtmlSlidePlan();
     if (!this.hasHtmlSlidesAiReady()) {
       this.showStatusNotification('請先完成 AI 處理，再轉成 HTML 簡報');
       this.updateHtmlSlidesButtonState();
@@ -1291,8 +1298,16 @@ class WebReader {
       // TOC 的每一段都是使用者看得見的導覽項目，不可以被 maxSlides 合併掉。
       maxSlides: options.maxSlides || Math.max(24, tocPlan.slides.length + 12)
     };
+    // AI 分頁只有在完整保留每個 TOC 邊界時才採用；否則用 TOC 自己的分頁。
+    const aiSlides = options.aiSlides || this.cachedHtmlSlidePlan || null;
+    const requiredStarts = tocPlan.slides.map(slide => slide.start);
+    const basePlan = aiSlides &&
+      this.isStructurallyValidHtmlSlidePlan({ slides: aiSlides }, units) &&
+      this.isHtmlSlidePlanRespectingStarts(aiSlides, requiredStarts)
+      ? { strategy: 'toc-ai-plan', slides: aiSlides }
+      : tocPlan;
     const repaired = this.validateAndRepairHtmlSlidePlan(
-      tocPlan,
+      basePlan,
       units,
       this.createSingleHtmlSlidePlan(units),
       repairOptions
@@ -1361,9 +1376,13 @@ class WebReader {
   buildHtmlSlidesWithoutToc(sourceRoot, options = {}) {
     const contentRoot = this.createHtmlSlidePlanningRoot(sourceRoot, options);
     const units = this.extractContentUnits(contentRoot);
-    const heuristicPlan = this.createHeuristicHtmlSlidePlan(units, options);
+    // AI 分頁建議只在單元指紋對得上時才套用；對不上就當作沒有。
+    const aiSlides = options.aiSlides || this.cachedHtmlSlidePlan || null;
+    const basePlan = this.isStructurallyValidHtmlSlidePlan({ slides: aiSlides || [] }, units)
+      ? { strategy: 'ai-plan', slides: aiSlides }
+      : this.createHeuristicHtmlSlidePlan(units, options);
     const fallbackPlan = this.createSingleHtmlSlidePlan(units);
-    const repaired = this.validateAndRepairHtmlSlidePlan(heuristicPlan, units, fallbackPlan, options);
+    const repaired = this.validateAndRepairHtmlSlidePlan(basePlan, units, fallbackPlan, options);
     const balanced = this.rebalanceHtmlSlideTails(repaired, units, options);
     const plan = this.mergeUnderBudgetHtmlSlides(balanced, units, options);
     const slides = this.renderHtmlSlidesFromPlan(plan, contentRoot);
@@ -1973,6 +1992,255 @@ class WebReader {
 
   // 沒有標題就回傳 null，讓燈箱沿用既有的「第 N 頁」遞補標題，
   // 避免整份簡報的側邊導覽出現一整排相同的「簡報內容」。
+  // ---------------------------------------------------------------------------
+  // AI 分頁建議：只回傳邊界，不回傳 HTML。設計見 docs/html-slide-ai-plan-design.md
+  // ---------------------------------------------------------------------------
+
+  // 非同步把快取的分頁建議讀進記憶體，供下一次開燈箱使用。
+  // 第一次開燈箱時可能還沒讀到，那就走啟發式分頁，行為與現在完全相同。
+  primeCachedHtmlSlidePlan() {
+    if (this.htmlSlidePlanPriming) return;
+    this.htmlSlidePlanPriming = true;
+    Promise.resolve()
+      .then(async () => {
+        const sourceRoot = typeof document !== 'undefined'
+          ? document.getElementById('reader-main-content')
+          : null;
+        if (!sourceRoot || !sourceRoot.textContent.trim()) return;
+        const contentRoot = this.createHtmlSlidePlanningRoot(sourceRoot);
+        const units = this.extractContentUnits(contentRoot);
+        this.cachedHtmlSlidePlan = await this.loadHtmlSlidePlanCache(units);
+      })
+      .catch(() => {})
+      .finally(() => { this.htmlSlidePlanPriming = false; });
+  }
+
+  // 在使用者已經同意的那次 AI 處理裡多問一次分頁；失敗一律安靜退回啟發式分頁。
+  async requestHtmlSlidePlan(reason = 'ai-run') {
+    if (!this.htmlSlidePlanEnabled) return null;
+    try {
+      const sourceRoot = typeof document !== 'undefined'
+        ? document.getElementById('reader-main-content')
+        : null;
+      if (!sourceRoot || !sourceRoot.textContent.trim()) return null;
+
+      const contentRoot = this.createHtmlSlidePlanningRoot(sourceRoot);
+      const units = this.extractContentUnits(contentRoot);
+      // 太短的內容啟發式已經夠好，不值得多打一次 API。
+      if (units.length < 6) return null;
+
+      const budget = this.getHtmlSlidePlanBudget();
+      const requiredStarts = this.getRequiredHtmlSlideStarts(sourceRoot, units);
+      // 直接要求 JSON 回應，模型才不會把 token 花在推理文字上然後被截斷。
+      const response = await this.requestGeminiGeneration(
+        this.buildHtmlSlidePlanPrompt(units, budget, requiredStarts),
+        'gemini-3.5-flash',
+        4000,
+        'application/json',
+        // 實測不關思考的話，模型會把整個輸出額度花在對成本做加總，答案根本產不出來。
+        0
+      );
+      const slides = this.parseHtmlSlidePlanResponse(response?.text, units);
+      if (!slides) return null;
+
+      await this.saveHtmlSlidePlanCache(slides, units, reason);
+      console.log('🧩 已取得 AI 分頁建議:', { slides: slides.length, reason });
+      return slides;
+    } catch (error) {
+      console.warn('AI 分頁建議失敗，改用啟發式分頁:', error?.message || error);
+      return null;
+    }
+  }
+
+  buildHtmlSlidePlanPrompt(units, budget, requiredStarts = []) {
+    const payload = {
+      budget: {
+        targetCost: budget.targetCost,
+        maxCost: budget.maxCost,
+        maxSlides: budget.maxSlides
+      },
+      requiredStarts,
+      units: units.map(unit => {
+        const entry = { i: unit.index, kind: unit.kind, cost: unit.cost };
+        if (unit.level) entry.level = unit.level;
+        if (unit.title) entry.title = unit.title;
+        if (unit.preview) entry.preview = unit.preview;
+        if (Array.isArray(unit.flags) && unit.flags.length) entry.flags = unit.flags;
+        if (unit.cost > budget.maxCost) entry.oversized = true;
+        return entry;
+      })
+    };
+
+    return [
+      '你是會議簡報的分頁助理。以下是一份已經排版好的內容，被切成有序的單元。',
+      '請決定投影片的分頁邊界，並替每一頁取一個能看出內容的標題。',
+      '直接輸出答案，不要逐步推理，也不要驗算 cost 加總。',
+      '',
+      '規則（違反任何一條，你的回覆都會被丟棄）：',
+      '1. 只輸出 JSON，不要有任何說明文字或 markdown 圍欄。',
+      '2. 格式：{"slides":[{"start":0,"end":3,"title":"標題"}]}',
+      '3. start/end 是單元索引，必須涵蓋全部單元、不重疊、不跳號、不重排。',
+      '   第一頁的 start 必須是最小的索引，最後一頁的 end 必須是最大的索引。',
+      '4. 每頁的 cost 總和大致接近 targetCost 即可，不必精算；超出的部分系統會自己再切。',
+      '   標了 oversized 的單元讓它自己一頁。',
+      '5. 在語意換節的地方分頁，不要把同一件事（例如案由與其決議）拆到兩頁。',
+      '5b. requiredStarts 裡的每個索引都必須是某一頁的 start；那是使用者在側邊導覽看得到的',
+      '    章節邊界，不可以被合併掉。你可以在章節內部再細分，但不能跨過這些邊界。',
+      '6. 標題用繁體中文，20 字以內，要看得出那一頁在講什麼；',
+      '   不要用「續」、「第 N 頁」這種沒有資訊的標題。',
+      '',
+      JSON.stringify(payload)
+    ].join('\n');
+  }
+
+  // TOC 頁面的章節起點是使用者在側邊導覽看得見的邊界，AI 只能在章節內細分。
+  getRequiredHtmlSlideStarts(sourceRoot, units) {
+    const entries = this.getHtmlSlideTocEntries(sourceRoot);
+    if (entries.length === 0) return [];
+    const tocPlan = this.createTocHtmlSlidePlan(entries, units);
+    if (!tocPlan) return [];
+    return tocPlan.slides.map(slide => slide.start);
+  }
+
+  // AI 的分頁必須把每個必要邊界都當成某一頁的起點，否則整份丟棄。
+  isHtmlSlidePlanRespectingStarts(slides, requiredStarts) {
+    if (!Array.isArray(requiredStarts) || requiredStarts.length === 0) return true;
+    if (!Array.isArray(slides) || slides.length === 0) return false;
+    const starts = new Set(slides.map(slide => slide.start));
+    return requiredStarts.every(start => starts.has(start));
+  }
+
+  // 只接受結構完全正確的回覆；有任何疑問就回傳 null，讓呼叫端退回啟發式分頁。
+  parseHtmlSlidePlanResponse(text, units) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+
+    const parsed = this.extractHtmlSlidePlanObject(raw);
+    if (!parsed || !Array.isArray(parsed.slides) || parsed.slides.length === 0) return null;
+
+    const slides = parsed.slides.map(slide => ({
+      start: Number(slide?.start),
+      end: Number(slide?.end),
+      title: this.getNormalizedContentText({ textContent: slide?.title }).slice(0, 40) || null
+    }));
+    if (slides.some(slide => !Number.isInteger(slide.start) || !Number.isInteger(slide.end))) return null;
+    if (!this.isStructurallyValidHtmlSlidePlan({ slides }, units)) return null;
+
+    return slides;
+  }
+
+  // 模型有時會夾著推理文字回覆，所以用括號配對把含 "slides" 的那個物件精準切出來，
+  // 而不是粗暴地取第一個 { 到最後一個 }。
+  extractHtmlSlidePlanObject(raw) {
+    const direct = this.parseJsonObject(raw);
+    if (direct && Array.isArray(direct.slides)) return direct;
+
+    let searchFrom = raw.length;
+    while (searchFrom > 0) {
+      const marker = raw.lastIndexOf('"slides"', searchFrom - 1);
+      if (marker < 0) return null;
+      searchFrom = marker;
+
+      let objectStart = raw.lastIndexOf('{', marker);
+      while (objectStart >= 0) {
+        const candidate = this.sliceBalancedObject(raw, objectStart);
+        const parsed = candidate ? this.parseJsonObject(candidate) : null;
+        if (parsed && Array.isArray(parsed.slides)) return parsed;
+        objectStart = raw.lastIndexOf('{', objectStart - 1);
+      }
+    }
+    return null;
+  }
+
+  sliceBalancedObject(raw, start) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < raw.length; index++) {
+      const character = raw[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === '\\') escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') inString = true;
+      else if (character === '{') depth++;
+      else if (character === '}') {
+        depth--;
+        if (depth === 0) return raw.slice(start, index + 1);
+      }
+    }
+    return null;
+  }
+
+  parseJsonObject(text) {
+    try {
+      return JSON.parse(String(text).trim());
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  // 單元列表會隨視窗寬高改變（正規化用的是當下的預算），
+  // 所以快取要記下當時的單元指紋，對不上就不套用。
+  getHtmlSlidePlanUnitSignature(units) {
+    return (Array.isArray(units) ? units : [])
+      .map(unit => `${unit.index}:${unit.kind}:${unit.cost}`)
+      .join('|');
+  }
+
+  async getHtmlSlidePlanCacheKey() {
+    const pageKey = this.getAIProcessingPageKey();
+    const contentHash = this.getAIProcessingContentHash();
+    if (!pageKey || !contentHash) return null;
+    return ['webreader-slide-plan', this.htmlSlidePlanVersion, pageKey, contentHash].join('|');
+  }
+
+  async saveHtmlSlidePlanCache(slides, units, reason = 'updated') {
+    try {
+      const cacheKey = await this.getHtmlSlidePlanCacheKey();
+      if (!cacheKey) return;
+
+      const storage = await this.getChromeStorage(['webReaderSlidePlanCache']);
+      const store = storage.webReaderSlidePlanCache || {};
+      store[cacheKey] = {
+        cacheKey,
+        planVersion: this.htmlSlidePlanVersion,
+        unitSignature: this.getHtmlSlidePlanUnitSignature(units),
+        createdAt: new Date().toISOString(),
+        reason,
+        slides
+      };
+      await this.setChromeStorage({
+        webReaderSlidePlanCache: this.pruneAIProcessingCacheStore(store, 5)
+      });
+    } catch (error) {
+      console.warn('儲存 AI 分頁建議失敗:', error);
+    }
+  }
+
+  async loadHtmlSlidePlanCache(units) {
+    try {
+      const cacheKey = await this.getHtmlSlidePlanCacheKey();
+      if (!cacheKey) return null;
+
+      const storage = await this.getChromeStorage(['webReaderSlidePlanCache']);
+      const entry = (storage.webReaderSlidePlanCache || {})[cacheKey];
+      if (!entry ||
+        entry.planVersion !== this.htmlSlidePlanVersion ||
+        !Array.isArray(entry.slides) ||
+        entry.unitSignature !== this.getHtmlSlidePlanUnitSignature(units)) {
+        return null;
+      }
+      if (!this.isStructurallyValidHtmlSlidePlan({ slides: entry.slides }, units)) return null;
+      return entry.slides;
+    } catch (error) {
+      console.warn('讀取 AI 分頁建議失敗:', error);
+      return null;
+    }
+  }
+
   // 貪婪切分會把前面的頁塞滿、最後留下一個幾乎空白的尾巴（實測有 3 個字的續頁）。
   // 這裡把前一頁的最後幾個單元往後挪，讓尾巴不再是孤兒。
   // 只在「同一段落的續頁」之間挪動：續頁的標題是系統生成的，代表它跟前一頁同屬一節，
@@ -4552,13 +4820,21 @@ class WebReader {
   }
 
   // 單個API呼叫函數
-  async requestGeminiGeneration(prompt, model, maxOutputTokens = 16000) {
+  async requestGeminiGeneration(
+    prompt,
+    model,
+    maxOutputTokens = 16000,
+    responseMimeType = '',
+    thinkingBudget = null
+  ) {
     const response = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
         action: 'geminiGenerate',
         prompt,
         model,
-        maxOutputTokens
+        maxOutputTokens,
+        responseMimeType,
+        thinkingBudget
       }, (result) => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));

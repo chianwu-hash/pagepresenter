@@ -1330,3 +1330,160 @@ test('拉回後會超出 maxCost 就不拉', () => {
 
   assert.equal(reader.rebalanceHtmlSlideTails(plan, units), plan);
 });
+
+// ---------------------------------------------------------------------------
+// AI 分頁建議：只接受結構完全正確的回覆
+// ---------------------------------------------------------------------------
+
+function planUnits(count = 6) {
+  return Array.from({ length: count }, (_, index) => ({
+    index, kind: index % 2 === 0 ? 'heading' : 'block',
+    title: index % 2 === 0 ? `第 ${index} 節` : null,
+    cost: index % 2 === 0 ? 135 : 300, flags: []
+  }));
+}
+
+test('AI 回覆是乾淨 JSON 時會被接受', () => {
+  const reader = createReader();
+  const units = planUnits(4);
+  const slides = reader.parseHtmlSlidePlanResponse(
+    '{"slides":[{"start":0,"end":1,"title":"開場說明"},{"start":2,"end":3,"title":"辦理事項"}]}',
+    units
+  );
+
+  assert.deepEqual(plain(slides), [
+    { start: 0, end: 1, title: '開場說明' },
+    { start: 2, end: 3, title: '辦理事項' }
+  ]);
+});
+
+test('AI 回覆包在說明文字或 markdown 圍欄裡也能取出', () => {
+  const reader = createReader();
+  const units = planUnits(2);
+  const slides = reader.parseHtmlSlidePlanResponse(
+    '好的，以下是分頁：\n```json\n{"slides":[{"start":0,"end":1,"title":"開場"}]}\n```\n希望有幫助。',
+    units
+  );
+
+  assert.deepEqual(plain(slides), [{ start: 0, end: 1, title: '開場' }]);
+});
+
+test('AI 回覆有破洞、重疊或重排時整份丟棄', () => {
+  const reader = createReader();
+  const units = planUnits(4);
+
+  // 跳過索引 1
+  assert.equal(reader.parseHtmlSlidePlanResponse(
+    '{"slides":[{"start":0,"end":0,"title":"A"},{"start":2,"end":3,"title":"B"}]}', units), null);
+  // 重疊
+  assert.equal(reader.parseHtmlSlidePlanResponse(
+    '{"slides":[{"start":0,"end":2,"title":"A"},{"start":2,"end":3,"title":"B"}]}', units), null);
+  // 重排
+  assert.equal(reader.parseHtmlSlidePlanResponse(
+    '{"slides":[{"start":2,"end":3,"title":"B"},{"start":0,"end":1,"title":"A"}]}', units), null);
+  // 沒有蓋到最後一個單元
+  assert.equal(reader.parseHtmlSlidePlanResponse(
+    '{"slides":[{"start":0,"end":2,"title":"A"}]}', units), null);
+});
+
+test('AI 回覆不是 JSON、空的、或索引不是整數時丟棄', () => {
+  const reader = createReader();
+  const units = planUnits(2);
+
+  assert.equal(reader.parseHtmlSlidePlanResponse('抱歉我無法處理', units), null);
+  assert.equal(reader.parseHtmlSlidePlanResponse('', units), null);
+  assert.equal(reader.parseHtmlSlidePlanResponse('{"slides":[]}', units), null);
+  assert.equal(reader.parseHtmlSlidePlanResponse(
+    '{"slides":[{"start":"0","end":"1.5","title":"A"}]}', units), null);
+});
+
+test('AI 標題會被正規化並截斷，空標題退回 null', () => {
+  const reader = createReader();
+  const units = planUnits(2);
+  const long = '很長的標題'.repeat(20);
+  const slides = reader.parseHtmlSlidePlanResponse(
+    JSON.stringify({ slides: [{ start: 0, end: 1, title: `  ${long}  ` }] }), units);
+
+  assert.equal(slides[0].title.length, 40);
+
+  const blank = reader.parseHtmlSlidePlanResponse(
+    '{"slides":[{"start":0,"end":1,"title":"   "}]}', units);
+  assert.equal(blank[0].title, null);
+});
+
+test('AI 分頁的標題不帶 generatedTitle，之後不會被合併吃掉', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'block', title: null, cost: 110, flags: [] },
+    { index: 1, kind: 'block', title: null, cost: 110, flags: [] }
+  ];
+  const slides = reader.parseHtmlSlidePlanResponse(
+    '{"slides":[{"start":0,"end":0,"title":"AI 取的標題"},{"start":1,"end":1,"title":"另一個標題"}]}',
+    units
+  );
+  const merged = reader.mergeUnderBudgetHtmlSlides({ strategy: 'ai-plan', slides }, units);
+
+  assert.equal(merged.slides.length, 2, '兩個真實標題都要留著');
+});
+
+test('分頁建議的單元指紋會反映單元組成', () => {
+  const reader = createReader();
+  const a = planUnits(4);
+  const b = planUnits(4);
+  b[2] = { ...b[2], cost: b[2].cost + 1 };
+
+  assert.equal(reader.getHtmlSlidePlanUnitSignature(a), reader.getHtmlSlidePlanUnitSignature(a));
+  assert.notEqual(reader.getHtmlSlidePlanUnitSignature(a), reader.getHtmlSlidePlanUnitSignature(b));
+  assert.notEqual(
+    reader.getHtmlSlidePlanUnitSignature(a),
+    reader.getHtmlSlidePlanUnitSignature(planUnits(5))
+  );
+});
+
+test('分頁建議的 prompt 帶上預算、單元與 oversized 標記', () => {
+  const reader = createReader();
+  const budget = reader.getHtmlSlidePlanBudget();
+  const units = [
+    { index: 0, kind: 'heading', level: 2, title: '一、教務處', cost: 135, flags: ['department'] },
+    { index: 1, kind: 'block', title: null, preview: '請於期限內完成', cost: 300, flags: [] },
+    { index: 2, kind: 'atomic', title: null, cost: budget.maxCost + 500, flags: ['table'] }
+  ];
+
+  const prompt = reader.buildHtmlSlidePlanPrompt(units, budget);
+  const payload = JSON.parse(prompt.slice(prompt.indexOf('{"budget"')));
+
+  assert.equal(payload.budget.maxCost, budget.maxCost);
+  assert.equal(payload.units.length, 3);
+  assert.equal(payload.units[0].title, '一、教務處');
+  assert.deepEqual(plain(payload.units[0].flags), ['department']);
+  assert.equal(payload.units[1].preview, '請於期限內完成');
+  assert.equal(payload.units[2].oversized, true);
+  assert.ok(!('oversized' in payload.units[1]));
+  assert.match(prompt, /只輸出 JSON/);
+});
+
+test('AI 分頁必須保留每個 TOC 邊界，否則不採用', () => {
+  const reader = createReader();
+  const required = [0, 3, 6];
+
+  assert.equal(reader.isHtmlSlidePlanRespectingStarts(
+    [{ start: 0, end: 2 }, { start: 3, end: 5 }, { start: 6, end: 8 }], required), true);
+  // 章節內再細分是允許的
+  assert.equal(reader.isHtmlSlidePlanRespectingStarts(
+    [{ start: 0, end: 1 }, { start: 2, end: 2 }, { start: 3, end: 5 }, { start: 6, end: 8 }], required), true);
+  // 把 3 併進前一頁就吃掉了一個導覽邊界
+  assert.equal(reader.isHtmlSlidePlanRespectingStarts(
+    [{ start: 0, end: 5 }, { start: 6, end: 8 }], required), false);
+  // 沒有必要邊界時一律通過
+  assert.equal(reader.isHtmlSlidePlanRespectingStarts([{ start: 0, end: 8 }], []), true);
+});
+
+test('prompt 會把必要邊界交給模型', () => {
+  const reader = createReader();
+  const budget = reader.getHtmlSlidePlanBudget();
+  const prompt = reader.buildHtmlSlidePlanPrompt(planUnits(4), budget, [0, 2]);
+  const payload = JSON.parse(prompt.slice(prompt.indexOf('{"budget"')));
+
+  assert.deepEqual(plain(payload.requiredStarts), [0, 2]);
+  assert.match(prompt, /requiredStarts/);
+});

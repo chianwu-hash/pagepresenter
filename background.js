@@ -38,7 +38,17 @@ function getStoredGeminiSettings() {
   });
 }
 
-async function callGemini({ prompt, model, apiKey, maxOutputTokens = 16000 }) {
+// 只允許已知的回應格式，不讓呼叫端把任意值透傳給供應商。
+const GEMINI_ALLOWED_RESPONSE_TYPES = new Set(['application/json']);
+
+async function callGemini({
+  prompt,
+  model,
+  apiKey,
+  maxOutputTokens = 16000,
+  responseMimeType = '',
+  thinkingBudget = null
+}) {
   const safeModel = GEMINI_ALLOWED_MODELS.has(model) ? model : 'gemini-3.5-flash';
   const safePrompt = typeof prompt === 'string' ? prompt : '';
   const safeMaxOutputTokens = Math.min(Math.max(Number(maxOutputTokens) || 16000, 1), 32000);
@@ -60,7 +70,10 @@ async function callGemini({ prompt, model, apiKey, maxOutputTokens = 16000 }) {
       }],
       generationConfig: {
         maxOutputTokens: safeMaxOutputTokens,
-        candidateCount: 1
+        candidateCount: 1,
+        ...(GEMINI_ALLOWED_RESPONSE_TYPES.has(responseMimeType) ? { responseMimeType } : {}),
+        // 只允許關閉思考；結構化的小任務不需要它，開著會把輸出額度用光。
+        ...(thinkingBudget === 0 ? { thinkingConfig: { thinkingBudget: 0 } } : {})
       }
     })
   });
@@ -114,7 +127,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         prompt,
         model,
         apiKey,
-        maxOutputTokens: message.action === 'geminiTest' ? 10 : message.maxOutputTokens
+        maxOutputTokens: message.action === 'geminiTest' ? 10 : message.maxOutputTokens,
+        responseMimeType: message.action === 'geminiTest' ? '' : message.responseMimeType,
+        thinkingBudget: message.action === 'geminiTest' ? null : message.thinkingBudget
       });
 
       sendResponse({ ok: true, ...result });

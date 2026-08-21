@@ -1221,3 +1221,93 @@ titles, refusing when the combination exceeds `maxCost`, chaining consecutive co
 structural validity after merging, pulling units back into a short tail, refusing to
 rebalance across a real title, refusing to empty the previous slide, and refusing a pull-back
 that would exceed `maxCost`.
+
+---
+
+## S16: The AI Slide Plan, Working End To End
+
+Design and rationale are in `docs/html-slide-ai-plan-design.md`. Both open questions were
+approved: a second AI call per run is acceptable, and the model may retitle slides.
+
+### What Shipped
+
+- `requestHtmlSlidePlan()` runs at the end of `startAIProcessing()`, inside the consent the
+  user already gave. It is best-effort — if it throws, times out or returns nonsense, the
+  formatted content is unaffected and pagination falls back to the heuristic.
+- `buildHtmlSlidePlanPrompt()` sends the existing unit list plus the budget and
+  `requiredStarts`. Nothing new is computed for it.
+- `parseHtmlSlidePlanResponse()` accepts only a structurally valid plan, then everything
+  downstream — repair, rebalance, merge — is the machinery that was already there.
+- `webReaderSlidePlanCache` is a **separate** store with its own `planVersion`.
+  `aiCachePromptVersion` is untouched and `webReaderAICache` entries are unchanged.
+- `openHtmlSlidesLightbox()` calls `primeCachedHtmlSlidePlan()`, which only reads the cache.
+  **No AI call is ever made from the lightbox.**
+
+### TOC Pages Are Included, Under A Constraint
+
+The design originally left TOC pages alone, which would have made the feature inert —
+every real ESA meeting has a TOC. Instead an AI plan is accepted on a TOC page only if
+**every TOC section start is also a slide start**. The model may subdivide within a section
+and retitle freely; it can never move or swallow a boundary visible in the side navigation.
+The same starts are handed to the model as `requiredStarts`.
+
+### Three Things The Live Run Taught
+
+Measured against the real extension and real Gemini, not assumed:
+
+1. **A small output cap is the wrong lever.** The design said to ask for a *smaller* cap so
+   a runaway response could not burn budget. At 2,000 tokens the response was a 156-character
+   fragment of the model's reasoning — the answer never arrived. Raising it to 32,000 did not
+   help either.
+2. **The lever is thinking, not tokens.** A three-way probe of the same trivial prompt:
+
+   | config | thoughtsTokenCount | returned |
+   |---|---|---|
+   | plain | 191 | reasoning fragment |
+   | `responseMimeType: application/json` | 386 | valid JSON |
+   | + `thinkingBudget: 0` | none | `{"slides":[...]}`, 45 characters |
+
+   `background.js` now accepts an allow-listed `responseMimeType` and a `thinkingBudget` of
+   0. Both are additive; existing callers pass neither and are unchanged.
+3. **Do not make the model do arithmetic.** The first prompt asked it to keep each slide's
+   cost sum under `maxCost`, and it spent its whole budget summing costs. The prompt now says
+   the budget is approximate and the system will re-split — which is true, because
+   `validateAndRepairHtmlSlidePlan()` does exactly that.
+
+### Result On A Real Page
+
+The demo meeting page, 25 units, through the real extension and a real Gemini call:
+
+| | heuristic | AI plan |
+|---|---|---|
+| strategy | `toc-plan-repaired` | `toc-ai-plan-repaired` |
+| slides | 12 | 12 |
+| worst overflow | 1.00 | 1.00 |
+| over budget / text mismatch | 0 / false | 0 / false |
+
+The numbers are the same because the constraints are the same. The difference is the side
+navigation:
+
+| heuristic | AI |
+|---|---|
+| 一、教務主任 →（續 1） | **教務處工作報告** |
+| 二、學務主任 →（續 1） | **學務處大掃除與回收報告** |
+| 三、總務主任 →（續 1） | **總務處工作報告與校園採購** |
+
+The AI returned 11 slides covering units 0–24 contiguously, hitting all eleven
+`requiredStarts` exactly. One of its slides exceeded the budget and the repair split it,
+giving the twelfth — and that split page took its own real title from the content
+(校園採購書單範例圖) rather than a 續 label.
+
+### Not Verified
+
+The round trip has been run on the demo page, not on a live ESA meeting — reloading the
+extension invalidates the tab's content script, and the ESA SPA cannot restore a meeting
+from its deep link. Ticking 114學年度 in the meeting list is the way back in.
+
+### Tests
+
+85 tests pass. Ten new cover the parsing contract: clean JSON, JSON wrapped in prose or a
+markdown fence, gaps, overlaps, reordering, incomplete coverage, non-integer indexes,
+non-JSON replies, title normalisation and truncation, AI titles surviving the merge pass,
+the unit signature, the prompt payload, and the TOC-boundary rule.
