@@ -1118,3 +1118,44 @@ extension was reloaded, and reloading the tab loses the meeting record.
 66 tests pass. Six expectations were re-pinned to the measured constants (`blockCost` 24 to
 30, `charsPerLine` 47 to 48 and the costs derived from them), and the budget test now
 asserts the outer-margin subtraction.
+
+---
+
+## S14: Second Meeting, Both Modes, Every Viewport
+
+S13 left one gap: the AI 精簡版 had not been re-measured after the layout constants were
+corrected. A second real ESA meeting closes it, and doubles the real-content sample.
+
+### Finding A Meeting
+
+The ESA meeting list needs 114學年度 ticked before the records show up. That is the way in
+for any future session — the SPA still will not restore a meeting from its deep link after
+a reload, so navigate rather than reload.
+
+### The Matrix
+
+Meeting id=4611, 13 meeting cards, run through the real extension. Offline formatting gives
+115 units of flat `P`/`H2`/`OL`/`UL`; the Gemini 精簡版 gives 92 units of `H3`/`P` with no
+`<br>` at all and 2786 characters against the offline version's 5685.
+
+| | 1920x1080 | 1536x739 | 1366x768 | 1280x600 | 1024x768 | 760x900 | 420x800 |
+|---|---|---|---|---|---|---|---|
+| offline slides | 27 | 36 | 34 | 45 | 38 | 30 | 41 |
+| AI slides | 8 | 13 | 13 | 20 | 15 | 10 | 16 |
+
+Every cell of that matrix measures **overflow 1.00 with zero scrolling slides**, no slide
+over budget, no text mismatch, and unit coverage clean (0 missing, 0 out of order) — 115
+units offline, 92 units on the AI version.
+
+Against the old range path on the same meeting: 22 slides of which **7 were over budget**,
+the worst costing 3928 against a 1080 budget.
+
+### Where That Leaves Things
+
+Two real meetings, two formatters, seven viewports each, plus 14 fixtures and a pathological
+Wikipedia article with its accuracy quantified. Nothing on target content scrolls; nothing
+loses or reorders content.
+
+The AI run itself took about 50 seconds and Gemini returned 7257 characters. The reader's
+own safeguard fired during it — "AI 重點版改動了內容，已只保留重點位置並套回格式化版本" —
+which is existing behaviour, not something this work introduced.
