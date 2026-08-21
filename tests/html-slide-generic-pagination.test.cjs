@@ -246,15 +246,16 @@ test('過長表格被切成續表，每段都重複表頭且列序不變', () =>
   assert.deepEqual(plain(bodyTexts), plain(bodyRows.map(row => row.textContent)));
 });
 
-test('含 rowspan 的表格維持原子單元，不會被拆壞', () => {
+test('含 rowspan 的表格照切，但合併儲存格涵蓋的列不會被切散', () => {
   const reader = createReader();
   const headerRow = tableRow([tableCell('th', '項次'), tableCell('th', '說明')]);
-  const spanCell = tableCell('td', '合併儲存格');
-  spanCell.setAttribute('rowspan', '3');
   const bodyRows = Array.from({ length: 30 }, (_, index) =>
     tableRow([tableCell('td', `第 ${index + 1} 列教務處負責辦理`), tableCell('td', '115-09-30 前完成')])
   );
-  bodyRows[0].appendChild(spanCell);
+  // 第 8 列的儲存格跨 4 列，涵蓋第 8-11 列。
+  const spanCell = tableCell('td', '合併儲存格');
+  spanCell.setAttribute('rowspan', '4');
+  bodyRows[7].appendChild(spanCell);
 
   const wrapper = new FakeElement({
     tagName: 'div',
@@ -267,8 +268,31 @@ test('含 rowspan 的表格維持原子單元，不會被拆壞', () => {
   });
   const root = new FakeElement({ tagName: 'div', children: [wrapper] });
 
-  assert.equal(reader.splitOversizedTableUnit(wrapper, 900), 0);
-  assert.equal(root.children.length, 1);
+  const added = reader.splitOversizedTableUnit(wrapper, 900);
+  assert.ok(added >= 1, '有安全切分點時仍要拆開，不能整張放棄');
+  assert.equal(root.children.length, added + 1);
+
+  // 每一段續表裡，跨列儲存格從它所在的列算起，必須還有足夠的列數。
+  root.children.forEach(part => {
+    const rows = part.querySelector('table').rows;
+    rows.forEach((row, rowIndex) => {
+      row.cells.forEach(cell => {
+        const span = Number(cell.getAttribute('rowspan') || 1);
+        if (span > 1) {
+          assert.ok(rowIndex + span <= rows.length,
+            `跨 ${span} 列的儲存格被切散：所在段只剩 ${rows.length - rowIndex} 列`);
+        }
+      });
+    });
+  });
+
+  // 列序與總數不變（每段續表都會重複一次表頭）
+  const bodyTexts = [];
+  root.children.forEach(part => {
+    part.querySelector('table').rows.slice(1).forEach(row => bodyTexts.push(row.textContent));
+  });
+  assert.equal(bodyTexts.length, 30);
+  assert.deepEqual(plain(bodyTexts), plain(bodyRows.map(row => row.textContent)));
 });
 
 test('規劃器不會產生只有標題、沒有內容的投影片', () => {
@@ -641,15 +665,27 @@ test('沒有區段標題列的表格完全不動', () => {
   assert.equal(wrapper.querySelector('table').rows.length, 3);
 });
 
-test('含 rowspan 的表格不做區段切分，維持原子單元', () => {
+test('被 rowspan 蓋住的區段標題列不提出來，留給 Range 路徑', () => {
   const reader = createReader();
+  // 版面：[0]一、教務處 [1]案由1 [2]案由2 [3]二、學務處 [4]案由1 [5]案由2
   const wrapper = createEsaTableWrapper(['一、教務處', '二、學務處']);
-  const spanned = wrapper.querySelector('table').rows[1].cells[0];
-  spanned.setAttribute('rowspan', '2');
+  const table = wrapper.querySelector('table');
+  // 讓第 1 列的儲存格跨 3 列，涵蓋到第 3 列，也就是「二、學務處」那一列。
+  table.rows[1].cells[0].setAttribute('rowspan', '3');
   const root = new FakeElement({ tagName: 'div', children: [wrapper] });
 
-  assert.equal(reader.splitTableAtSectionRows(wrapper), 0);
-  assert.equal(root.children.length, 1);
+  const added = reader.splitTableAtSectionRows(wrapper);
+
+  // 安全的「一、教務處」照提；被蓋住的「二、學務處」留在表格裡。
+  const headings = root.children.filter(child => child.tagName === 'H2').map(h => h.textContent);
+  assert.deepEqual(plain(headings), ['一、教務處']);
+  assert.ok(added >= 1);
+  assert.match(root.children.map(c => c.textContent).join(''), /二、學務處/);
+  assert.equal(
+    root.children.filter(child => child.tagName === 'H2' && child.textContent === '二、學務處').length,
+    0,
+    '不可以在跨列合併中間切開'
+  );
 });
 
 test('區段切分讓規劃器切在處室邊界，而不是切在列數預算上', () => {

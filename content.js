@@ -1427,11 +1427,14 @@ class WebReader {
     if (!table) return 0;
 
     const rows = this.getTableLayoutRows(table);
+    // 區段標題列若被上方的 rowspan 蓋住，就不能在它前面切開，
+    // 那個區段邊界只好留給 Range 路徑處理。
+    const coverage = this.getTableRowSpanCoverage(rows);
     const segments = [];
     let currentSegment = { title: null, rows: [] };
-    rows.forEach(row => {
+    rows.forEach((row, rowIndex) => {
       const title = this.getTableSectionTitle(row);
-      if (!title) {
+      if (!title || !this.isSafeTableCutIndex(coverage, rowIndex)) {
         currentSegment.rows.push(row);
         return;
       }
@@ -1636,13 +1639,16 @@ class WebReader {
     const headerCost = layout.tableCost +
       (caption ? this.estimateTextBlockLayoutCost(this.getNormalizedContentText(caption), layout) : 0) +
       headerRows.reduce((sum, row) => sum + this.estimateTableRowLayoutCost(row, layout), 0);
+    // 跨列合併的儲存格不能被切開，所以只在沒有 rowspan 延伸進來的列前面下刀。
+    const coverage = this.getTableRowSpanCoverage(rows);
     const chunks = [];
     let currentChunk = [];
     let currentCost = headerCost;
 
-    bodyRows.forEach(row => {
+    bodyRows.forEach((row, bodyIndex) => {
       const rowCost = this.estimateTableRowLayoutCost(row, layout);
-      if (currentChunk.length > 0 && currentCost + rowCost > maxCost) {
+      const canCut = this.isSafeTableCutIndex(coverage, headerRowCount + bodyIndex);
+      if (currentChunk.length > 0 && canCut && currentCost + rowCost > maxCost) {
         chunks.push(currentChunk);
         currentChunk = [];
         currentCost = headerCost;
@@ -1680,16 +1686,30 @@ class WebReader {
     const isBareTable = String(element?.tagName || '').toUpperCase() === 'TABLE';
     const table = isBareTable ? element : element?.querySelector?.('table');
     if (!table) return null;
-    // 只有一張表格時才安全；巢狀表格或跨列合併都直接放棄拆分。
+    // 巢狀表格結構不明，直接放棄；跨列合併改成只在安全的切分點下刀。
     if (this.elementQueryCount(element, 'table') > (isBareTable ? 0 : 1)) return null;
-    if (this.hasTableRowSpan(table)) return null;
     return table;
   }
 
-  hasTableRowSpan(table) {
-    return Array.from(table?.rows || []).some(row =>
-      Array.from(row.cells || []).some(cell => Number(cell.rowSpan) > 1)
-    );
+  // 每一列有幾個「上方儲存格的 rowspan」延伸進來。
+  // 只有覆蓋數為 0 的列，才能在它前面切開而不會把合併儲存格切壞。
+  getTableRowSpanCoverage(rows) {
+    const coverage = new Array(rows.length).fill(0);
+    rows.forEach((row, rowIndex) => {
+      Array.from(row?.cells || []).forEach(cell => {
+        const span = Math.max(1, Number(cell.rowSpan) || 1);
+        for (let offset = 1; offset < span; offset++) {
+          const target = rowIndex + offset;
+          if (target < coverage.length) coverage[target] += 1;
+        }
+      });
+    });
+    return coverage;
+  }
+
+  // 第一列永遠可切（上面沒有東西）；呼叫端自己負責不要切出空的第一段。
+  isSafeTableCutIndex(coverage, index) {
+    return index >= 0 && index < coverage.length && coverage[index] === 0;
   }
 
   countLeadingTableHeaderRows(rows) {

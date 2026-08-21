@@ -924,3 +924,58 @@ line-wrap boundary case.
 
 `tests/helpers/fake-dom.cjs` grew text nodes (`FakeText`), `childNodes`, and `firstChild`,
 since `<br>` handling needs mixed inline content that the element-only fake could not model.
+
+---
+
+## S11: Splitting Tables That Contain Row Spans
+
+S7 refused to touch any table with a `rowSpan` cell, so those ESA pages always took the
+Range path and their overlong sections could never be split. That was the last known gap.
+
+### The Rule
+
+A cut before row *i* is safe only when no cell that started earlier still covers row *i*.
+`getTableRowSpanCoverage(rows)` walks every cell once and returns, per row, how many spans
+reach into it; `isSafeTableCutIndex()` accepts a row only when that count is zero. Both
+splitters now consult it:
+
+- `splitOversizedTableUnit()` closes a chunk only at a safe row. If the budget is exceeded
+  on an unsafe row it keeps going until the span ends, so a merged cell is never cut in
+  half.
+- `splitTableAtSectionRows()` hoists a section title only when its row is safe. A section
+  row buried under a span stays in the table, so the TOC entry finds no top-level heading,
+  `createTocHtmlSlidePlan()` returns null, and the whole page falls back to Range — exactly
+  the behaviour that was there before, but now only for the boundaries that actually need
+  it instead of the whole table.
+
+`getSplittableTable()` no longer rejects row spans outright. Nested tables are still
+refused; their structure is not knowable from the outside.
+
+### Measured
+
+Two fixtures that differ only in how far the span reaches:
+
+| Fixture | span covers | strategy |
+|---|---|---|
+| ESA 表格內區段標題（含 rowspan） | rows inside one section | `toc-plan` |
+| ESA rowspan 跨越區段邊界 | into the next section's title row | `toc-fallback` |
+
+Both render 4 slides with the same titles and measure overflow 1.00. Before this change the
+first one also fell back, losing the ability to split its overlong sections.
+
+The real ESA meeting is unchanged: 38 slides, 0 over budget, worst overflow 1.01, nothing
+scrolls, 149 units with 0 missing and 0 out of order.
+
+### Tests
+
+62 tests pass. The two tests that previously asserted "a table with rowSpan is never split"
+now assert the stronger contract instead: the table *is* split, and for every cell with
+`rowspan="N"` the part it lands in still has N rows from that cell onward; and a section
+title covered by a span is not hoisted while safe ones still are.
+
+### Remaining
+
+- Nested tables are still atomic.
+- The only fixtures above 1.00 overflow remain the two single-large-image ones at 1.03,
+  which is the documented atomic-media case.
+- AI slide-plan is still not started, per the original scope note.

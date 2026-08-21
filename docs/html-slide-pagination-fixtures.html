@@ -160,7 +160,7 @@ validateAndRepairHtmlSlidePlan → renderHtmlSlidesFromPlan</code>，用來人�
       ).join('') + '</tbody></table>'
   });
 
-  // 帶 rowspan 的 ESA 表格：區段列提不出來，必須退回 Range 路徑而不是塌成一張。
+  // rowspan 沒有跨過區段邊界：可以在安全點切開，仍走 plan 路徑。
   fixtures.push({
     name: 'ESA 表格內區段標題（含 rowspan）',
     useToc: true,
@@ -168,6 +168,20 @@ validateAndRepairHtmlSlidePlan → renderHtmlSlidesFromPlan</code>，用來人�
       ['一、教務處', '二、學務處', '三、總務處'].map((title, t) =>
         `<tr><td colspan="3">${title}</td></tr>` +
         `<tr><td rowspan="2">合併儲存格</td><td>承辦單位</td><td>請於期限內完成並回報辦理情形</td></tr>` +
+        Array.from({ length: 3 }, (_, i) =>
+          `<tr><td>案由 ${i + 1}</td><td>承辦單位</td><td>請於期限內完成並回報辦理情形</td></tr>`
+        ).join('')
+      ).join('') + '</tbody></table>'
+  });
+
+  // rowspan 一路蓋到下一個區段標題列：那個邊界指不到，整頁必須退回 Range 路徑。
+  fixtures.push({
+    name: 'ESA rowspan 跨越區段邊界',
+    useToc: true,
+    html: '<table><tbody>' +
+      ['一、教務處', '二、學務處', '三、總務處'].map(title =>
+        `<tr><td colspan="3">${title}</td></tr>` +
+        `<tr><td rowspan="5">跨到下一節的合併儲存格</td><td>承辦單位</td><td>請於期限內完成並回報辦理情形</td></tr>` +
         Array.from({ length: 3 }, (_, i) =>
           `<tr><td>案由 ${i + 1}</td><td>承辦單位</td><td>請於期限內完成並回報辦理情形</td></tr>`
         ).join('')
