@@ -367,9 +367,9 @@ test('沒有 window 時版面度量落在校準過的預設值上', () => {
   const layout = reader.getHtmlSlideLayoutMetrics();
 
   assert.equal(layout.lineCost, 80);
-  assert.equal(layout.charsPerLine, 47);
+  assert.equal(layout.charsPerLine, 48);
   assert.equal(layout.contentHeight, 605);
-  assert.equal(layout.blockCost, 24);
+  assert.equal(layout.blockCost, 30);
   assert.equal(layout.listItemCost, 15);
   assert.equal(layout.tableRowCost, 38);
   assert.equal(layout.tableCost, 34);
@@ -380,7 +380,11 @@ test('分頁預算由可視內容高度換算，不是寫死的常數', () => {
   const layout = reader.getHtmlSlideLayoutMetrics();
   const budget = reader.getHtmlSlidePlanBudget();
 
-  assert.equal(budget.maxCost, Math.round(layout.contentHeight * layout.costPerPixel * 0.95));
+  // 預算要先扣掉每張投影片頭尾各一個外露的區塊邊界。
+  assert.equal(
+    budget.maxCost,
+    Math.round(layout.contentHeight * layout.costPerPixel * 0.95) - 2 * layout.blockCost
+  );
   assert.equal(budget.targetCost, Math.round(budget.maxCost * 0.75));
   assert.ok(budget.maxCost > 1000 && budget.maxCost < 1200);
   // 呼叫端仍可覆寫。
@@ -404,10 +408,10 @@ test('成本以渲染行數計算：兩個短段落比一個等長的長段落�
     ]
   });
 
-  // 每段 30 字 -> 各佔 1 行：2 * (80 + 24) = 208
-  assert.equal(reader.estimateHtmlContentCost(twoShortBlocks), 208);
-  // 一段 60 字 -> 佔 2 行：160 + 24 = 184
-  assert.equal(reader.estimateHtmlContentCost(oneLongBlock), 184);
+  // 每段 30 字 -> 各佔 1 行：2 * (80 + 30) = 220
+  assert.equal(reader.estimateHtmlContentCost(twoShortBlocks), 220);
+  // 一段 60 字 -> 佔 2 行：160 + 30 = 190
+  assert.equal(reader.estimateHtmlContentCost(oneLongBlock), 190);
   assert.ok(
     reader.estimateHtmlContentCost(twoShortBlocks) > reader.estimateHtmlContentCost(oneLongBlock),
     '字數相同但區塊較多時，實際佔用的高度較高'
@@ -421,7 +425,7 @@ test('清單項目的邊界成本低於段落', () => {
   const block = new FakeElement({ tagName: 'p', className: 'reader-paragraph', text });
 
   assert.equal(reader.estimateHtmlContentCost(item), 95);
-  assert.equal(reader.estimateHtmlContentCost(block), 104);
+  assert.equal(reader.estimateHtmlContentCost(block), 110);
 });
 
 test('表格成本 = 表格邊界 + 每列（文字行 + 儲存格內距）', () => {
@@ -521,7 +525,7 @@ test('圖說文字算在媒體成本裡', () => {
   const withCaption = reader.estimateHtmlContentCost(createFigure(960, 540, '示意圖 1'));
   const withoutCaption = reader.estimateHtmlContentCost(createFigure(960, 540));
 
-  assert.equal(withCaption - withoutCaption, 104, '一行圖說 = lineCost + blockCost');
+  assert.equal(withCaption - withoutCaption, 110, '一行圖說 = lineCost + blockCost');
 });
 
 test('讀不到圖片尺寸時退回保底的媒體成本', () => {
@@ -854,7 +858,7 @@ test('標題比同字數的內文貴，metadata 比較便宜（字級不同）',
   assert.ok(metadataCost < paragraphCost, `${metadataCost} < ${paragraphCost}`);
   // 34px 標題：每行放得下的字變少、行高變高，再加上標題自己的邊界。
   assert.equal(headingCost, 135);
-  assert.equal(metadataCost, 81);
+  assert.equal(metadataCost, 87);
 });
 
 test('大字級標題換行更早，長標題會多算一行', () => {
@@ -919,7 +923,7 @@ test('沒有附件卡片的區塊退回文字估算', () => {
     text: '本案無附件'
   });
 
-  assert.equal(reader.estimateHtmlContentCost(empty), 104);
+  assert.equal(reader.estimateHtmlContentCost(empty), 110);
 });
 
 // ---------------------------------------------------------------------------

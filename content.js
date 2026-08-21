@@ -1862,7 +1862,10 @@ class WebReader {
   // safetyRatio 留給行高／邊界的估算誤差，確保投影片不需要捲動。
   getHtmlSlidePlanBudget(options = {}) {
     const layout = this.getHtmlSlideLayoutMetrics();
-    const fittingCost = Math.round(layout.contentHeight * layout.costPerPixel * 0.95);
+    // 第一個與最後一個區塊的外側 margin 會穿過沒有邊框的 .reader-slide-content
+    // 往外收合，實測每張多出約兩個區塊邊界，預算必須先扣掉。
+    const outerMarginCost = 2 * layout.blockCost;
+    const fittingCost = Math.round(layout.contentHeight * layout.costPerPixel * 0.95) - outerMarginCost;
     const maxCost = options.maxCost || Math.max(2 * layout.lineCost, fittingCost);
 
     return {
@@ -2231,12 +2234,13 @@ class WebReader {
     // styles.css 在 max-width: 760px 時把內文字級降到 22px。
     const isCompact = viewportWidth > 0 && viewportWidth <= 760;
     const fontSize = isCompact ? 22 : 28;
+    // 以下偏移量都是在燈箱裡實測 body 的 clientWidth/clientHeight 扣掉 padding 得到的，
+    // 桌機的高度公式在 600/739/1080 三個高度上都與實測完全相符。
     const bodyWidth = viewportWidth > 0
-      ? Math.max(240, viewportWidth - (isCompact ? 40 : 120))
-      : 1416;
-    // 扣掉燈箱外框、卡片標題列與內文區的上下 padding，剩下的才是真正能放內容的高度。
+      ? Math.max(240, viewportWidth - (isCompact ? 46 : 82))
+      : 1454;
     const contentHeight = viewportHeight > 0
-      ? Math.max(160, viewportHeight - (isCompact ? 118 : 134))
+      ? Math.max(160, viewportHeight - (isCompact ? 101 : 134))
       : 605;
     // styles.css: .reader-image { max-height: 70vh; object-fit: contain }
     const maxMediaHeight = viewportHeight > 0 ? viewportHeight * 0.7 : 517;
@@ -2250,7 +2254,8 @@ class WebReader {
 
     return {
       lineCost,
-      blockCost: pixelCost(13),
+      // 段落上下 margin 各 16px，相鄰時收合成 16px。
+      blockCost: pixelCost(16),
       headingCost: pixelCost(20),
       headingScale: headingFontSize / fontSize,
       subheadingScale: subheadingFontSize / fontSize,

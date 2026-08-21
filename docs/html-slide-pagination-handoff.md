@@ -1047,3 +1047,74 @@ counted and scaled by column width, the unknown-dimensions fallback inside a cel
   factor in `getHtmlSlidePlanBudget()`, at the cost of slightly emptier slides everywhere.
   It was left as measured on the target content, where the worst case is 1.01.
 - The 18 un-splittable blocks need a reader-side change, not a planner change.
+
+---
+
+## S13: Layout Constants Measured Instead Of Fitted, And Every Viewport Fits
+
+The cost model was calibrated once at 1536x739 and had grown a lot since (character widths,
+line breaks, heading sizes, attachments, cell media). Sweeping the real ESA meeting across
+seven viewports exposed three constants that had been *fitted* rather than measured.
+
+### What Was Measured
+
+Reading `clientWidth`/`clientHeight` minus padding straight off the rendered slide body:
+
+| viewport | usable width | usable height |
+|---|---|---|
+| 1920x1080 | 1838 | 946 |
+| 1536x739 | 1454 | 605 |
+| 1280x600 | 1198 | 466 |
+| 700x800 (compact) | 654 | 699 |
+| 420x800 (compact) | 374 | 699 |
+
+The desktop height formula `viewportHeight - 134` was already exact at all three heights.
+Three things were not:
+
+- **Paragraph margin.** Modelled as 13px, fitted back in S5. The CSS is `16px` top and
+  bottom, collapsing to 16px between siblings. `blockCost` now comes from 16.
+- **Compact offsets.** `viewportWidth - 40` and `viewportHeight - 118` were guesses;
+  measured they are `- 46` and `- 101`. The width guess was optimistic, which is the unsafe
+  direction — it predicted less wrapping than actually happens.
+- **The slide's own outer margins.** The first and last block's margins collapse *through*
+  `.reader-slide-content`, which has no border or padding, and land outside it. That is
+  about 32px per slide that the budget never subtracted. One slide measured 591px of content
+  against 605px available — it fitted — and still scrolled, purely because of those two
+  escaping margins. `getHtmlSlidePlanBudget()` now subtracts `2 * blockCost`.
+
+### Result
+
+Real ESA meeting, offline formatting, every viewport:
+
+| viewport | chars/line | maxCost | slides | worst overflow | scrolling |
+|---|---|---|---|---|---|
+| 1920x1080 | 61 | 1629 | 27 | 1.00 | 0 |
+| 1536x739 | 48 | 1020 | 41 | 1.00 | 0 |
+| 1366x768 | 42 | 1072 | 40 | 1.00 | 0 |
+| 1280x600 | 39 | 772 | 56 | 1.00 | 0 |
+| 1024x768 | 31 | 1072 | 42 | 1.00 | 0 |
+| 760x900 | 30 | 1740 | 33 | 1.00 | 0 |
+| 420x800 | 15 | 1513 | 49 | 1.00 | 0 |
+
+Every one of them: nothing scrolls, no slide over budget, no text mismatch, and unit
+coverage clean (0 missing, 0 out of order). Slide count adapts sensibly — 27 on a 1080p
+display, 56 on a short 600px-tall window.
+
+Before this milestone the same sweep read 1.18 at 420x800, 1.04 at 1280x600 and 1.01-1.03
+elsewhere.
+
+All 14 fixtures keep their strategy, slide count and overflow; the only ones above 1.00 are
+still the two single-large-image fixtures at 1.03.
+
+### Not Re-Verified
+
+The AI 精簡版 shape was last measured before these constants changed (15 slides, 1.00 at
+1536x739). Every change since makes the model *more* conservative, so it should be equal or
+better, but it has not been re-run — the ESA tab's content script went stale when the
+extension was reloaded, and reloading the tab loses the meeting record.
+
+### Tests
+
+66 tests pass. Six expectations were re-pinned to the measured constants (`blockCost` 24 to
+30, `charsPerLine` 47 to 48 and the costs derived from them), and the budget test now
+asserts the outer-margin subtraction.
