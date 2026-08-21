@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>PagePresenter HTML 簡報分頁 Fixture 驗證</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; margin: 24px; background: #f6f7f9; color: #1f2933; }
+  h1 { font-size: 20px; }
+  #harness-report { border-collapse: collapse; width: 100%; background: #fff; font-size: 13px; }
+  #harness-report th, #harness-report td { border: 1px solid #d7dce2; padding: 6px 8px; text-align: left; vertical-align: top; }
+  #harness-report th { background: #eef1f5; }
+  .bad { background: #ffe6e6; }
+  .good { background: #e9f7ec; }
+  pre { white-space: pre-wrap; font-size: 12px; margin: 0; }
+  /* 讀者容器僅供 buildHtmlSlidesFromCurrentContent() 取用，不需可見。 */
+  #reader-stage { position: absolute; left: -99999px; top: 0; width: 900px; }
+</style>
+</head>
+<body>
+<h1>PagePresenter HTML 簡報分頁 Fixture 驗證</h1>
+<p>此頁不呼叫任何 AI，只在真實瀏覽器 DOM 上跑
+<code>createStructuredOfflineContent → extractContentUnits → createHeuristicHtmlSlidePlan →
+validateAndRepairHtmlSlidePlan → renderHtmlSlidesFromPlan</code>，用來人工檢查沒有 TOC 的一般頁面是否被切成合理的多張投影片。</p>
+<table id="harness-report">
+  <thead>
+    <tr>
+      <th>Fixture</th>
+      <th>單元數</th>
+      <th>張數</th>
+      <th>策略</th>
+      <th>每張 cost</th>
+      <th>文字覆蓋</th>
+      <th>標題</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div id="reader-stage"><div id="reader-main-content"></div></div>
+
+<script>window.module = { exports: {} };</script>
+<script src="../content.js"></script>
+<script>
+(async function () {
+  const { WebReader } = window.module.exports;
+  const reader = Object.create(WebReader.prototype);
+  reader.sections = [];
+  reader.tableOfContents = [];
+  reader.esaAttachmentSources = new Map();
+
+  function makeImageDataUrl(width, height) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(0, 0, width, Math.max(2, Math.round(height / 12)));
+    return canvas.toDataURL('image/png');
+  }
+
+  const paragraph = index =>
+    `<p>第 ${index} 段：本案依教育局來文辦理，請各處室依權責於期限內完成，並將辦理情形回報承辦人彙整。相關表件已放置於共用資料夾，逾期未回報者將列入追蹤管制。</p>`;
+
+  const fixtures = [
+    {
+      name: '無標題長文',
+      html: Array.from({ length: 24 }, (_, i) => paragraph(i + 1)).join('\n')
+    },
+    {
+      name: '只有一個 h1 的長文',
+      html: '<h1>115 學年度第 1 學期校務行政重點說明</h1>\n' +
+        Array.from({ length: 22 }, (_, i) => paragraph(i + 1)).join('\n')
+    },
+    {
+      name: '全 div 內容',
+      html: Array.from({ length: 24 }, (_, i) =>
+        `<div>第 ${i + 1} 區塊：本項工作由各處室自行控管進度，請於每月月底前更新進度表，並保留佐證資料備查，以利年度考核時提供。</div>`
+      ).join('\n')
+    },
+    {
+      name: 'list-heavy 頁',
+      html: '<ul>' + Array.from({ length: 40 }, (_, i) =>
+        `<li>第 ${i + 1} 項待辦事項：請承辦人於期限內完成並回報辦理情形。</li>`
+      ).join('') + '</ul>'
+    },
+    {
+      name: 'table-only 頁',
+      html: '<table><tbody>' + Array.from({ length: 30 }, (_, i) =>
+        `<tr><td>第 ${i + 1} 列</td><td>負責單位</td><td>115-09-${String((i % 28) + 1).padStart(2, '0')}</td></tr>`
+      ).join('') + '</tbody></table>'
+    },
+    {
+      name: '多表格頁',
+      html: Array.from({ length: 5 }, (_, t) =>
+        '<table><tbody>' + Array.from({ length: 8 }, (_, i) =>
+          `<tr><td>表 ${t + 1} 第 ${i + 1} 列</td><td>負責單位</td><td>備註說明文字</td></tr>`
+        ).join('') + '</tbody></table>'
+      ).join('\n')
+    },
+    {
+      // 用 canvas 產生真實尺寸的 PNG，才能驗證媒體成本是依原始比例估算而不是固定值。
+      name: '圖文混排頁',
+      html: Array.from({ length: 6 }, (_, i) =>
+        `${paragraph(i + 1)}\n<img src="${makeImageDataUrl(960, 540)}" alt="示意圖 ${i + 1}">`
+      ).join('\n')
+    },
+    {
+      name: '直式大圖頁',
+      html: Array.from({ length: 4 }, (_, i) =>
+        `<img src="${makeImageDataUrl(800, 1000)}" alt="直式大圖 ${i + 1}">`
+      ).join('\n')
+    },
+    {
+      name: '混合標題長文',
+      html: Array.from({ length: 6 }, (_, s) =>
+        `<h2>${'一二三四五六'[s]}、第 ${s + 1} 節工作重點</h2>\n` +
+        Array.from({ length: 4 }, (_, i) => paragraph(i + 1)).join('\n')
+      ).join('\n')
+    }
+  ];
+
+  const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
+
+  function buildReaderContent(html) {
+    const holder = document.createElement('div');
+    holder.innerHTML = html;
+    const fragment = document.createDocumentFragment();
+    Array.from(holder.childNodes).forEach(node => fragment.appendChild(node));
+    return reader.createStructuredOfflineContent(fragment);
+  }
+
+  // ESA 會議記錄的真實形狀：區段標題是表格裡的單格列，不是頂層 heading。
+  // 用來檢查 TOC 邊界是否能用「頂層 children 索引」表示。
+  fixtures.push({
+    name: 'ESA 表格內區段標題',
+    useToc: true,
+    probeSections: true,
+    html: '<table><tbody>' +
+      ['一、教務處', '二、學務處', '三、總務處'].map((title, t) =>
+        `<tr><td colspan="3">${title}</td></tr>` +
+        Array.from({ length: 4 }, (_, i) =>
+          `<tr><td>案由 ${i + 1}</td><td>承辦單位</td><td>請於期限內完成並回報辦理情形</td></tr>`
+        ).join('')
+      ).join('') + '</tbody></table>'
+  });
+
+  // 有 TOC 的 ESA 主流程只做煙霧測試，本次工作不改它。
+  fixtures.push({
+    name: 'TOC 路徑（ESA 煙霧測試）',
+    useToc: true,
+    html: Array.from({ length: 4 }, (_, s) =>
+      `<h2>${'一二三四'[s]}、第 ${s + 1} 處室</h2>\n` +
+      Array.from({ length: 3 }, (_, i) => paragraph(i + 1)).join('\n')
+    ).join('\n')
+  });
+
+  const mainContent = document.getElementById('reader-main-content');
+  const tbody = document.querySelector('#harness-report tbody');
+  const results = [];
+
+  // 圖片必須先解碼，naturalWidth/naturalHeight 才讀得到，媒體成本才會用真實比例估算。
+  async function waitForImages(root) {
+    const images = Array.from(root.querySelectorAll('img'));
+    await Promise.all(images.map(image => image.decode().catch(() => {})));
+  }
+
+  await (async () => {
+  for (const fixture of fixtures) {
+    mainContent.innerHTML = '';
+    const content = buildReaderContent(fixture.html);
+    mainContent.appendChild(content);
+    await waitForImages(mainContent);
+
+    reader.sections = [];
+    reader.tableOfContents = [];
+    let sectionProbe = null;
+    if (fixture.useToc) {
+      reader.sections = Array.from(content.querySelectorAll('.reader-header'));
+      reader.tableOfContents = reader.sections.map(header => ({
+        text: header.textContent.trim(),
+        level: 2
+      }));
+      reader.shouldUseAiOriginalDepartmentToc = () => false;
+    }
+    if (fixture.probeSections) {
+      // TOC 邊界能不能用「頂層 children 索引」表示？
+      const contentRoot = reader.resolveHtmlSlideContentRoot(mainContent);
+      const topLevel = Array.from(contentRoot.children);
+      sectionProbe = reader.sections.map(section => ({
+        text: section.textContent.trim().slice(0, 12),
+        tag: section.tagName,
+        isTopLevelChild: topLevel.includes(section),
+        depth: (() => {
+          let depth = 0;
+          let node = section;
+          while (node && node !== contentRoot) { depth++; node = node.parentElement; }
+          return depth;
+        })()
+      }));
+    }
+
+    const slides = reader.buildHtmlSlidesFromCurrentContent();
+    const metrics = reader.lastHtmlSlideQualityMetrics || {};
+    const sourceText = normalize(mainContent.textContent);
+    const slideText = slides.map(slide => normalize(slide.content?.textContent)).join('');
+    const coverage = sourceText.length
+      ? Math.round((slideText.replace(/\s+/g, '').length / sourceText.replace(/\s+/g, '').length) * 100)
+      : 0;
+
+    const result = {
+      name: fixture.name,
+      readerTopLevelChildren: mainContent.children.length,
+      unitCount: metrics.unitCount || 0,
+      slideCount: slides.length,
+      strategy: metrics.strategy,
+      slideCosts: metrics.slideCosts || [],
+      maxSlideCost: metrics.maxSlideCost || 0,
+      coverage,
+      possibleTextMismatch: metrics.possibleTextMismatch,
+      overlongSlideCount: metrics.overlongSlideCount,
+      shortSlideCount: metrics.shortSlideCount,
+      sectionProbe,
+      titles: slides.map(slide => slide.title)
+    };
+    results.push(result);
+
+    const row = document.createElement('tr');
+    const uniqueTitles = new Set(result.titles).size;
+    // 覆蓋率低於 100% 多半是投影片標題吃掉了重複的標題列，
+    // 真正該看的是 possibleTextMismatch 與 overlongSlideCount。
+    const healthy = result.slideCount > 1 &&
+      !result.possibleTextMismatch &&
+      result.overlongSlideCount === 0;
+    row.className = healthy ? 'good' : 'bad';
+    row.innerHTML = `
+      <td>${fixture.name}<br><small>root children: ${result.readerTopLevelChildren}</small></td>
+      <td>${result.unitCount}</td>
+      <td>${result.slideCount}</td>
+      <td>${result.strategy || ''}</td>
+      <td><pre>${result.slideCosts.join(', ')}</pre></td>
+      <td>${coverage}%<br><small>mismatch: ${result.possibleTextMismatch}<br>overlong: ${result.overlongSlideCount}</small></td>
+      <td><pre>${result.titles.join('\n')}</pre><small>unique: ${uniqueTitles}</small></td>
+    `;
+    tbody.appendChild(row);
+  }
+  })();
+
+  mainContent.innerHTML = '';
+
+  // 同一份 ESA 內容跑兩條路徑，用來看出 plan contract 表達不了表格內的區段邊界。
+  window.__compareEsaPaths = async () => {
+    const fixture = fixtures.find(item => item.name === 'ESA 表格內區段標題');
+    mainContent.innerHTML = '';
+    const content = buildReaderContent(fixture.html);
+    mainContent.appendChild(content);
+    await waitForImages(mainContent);
+
+    const departments = ['一、教務處', '二、學務處', '三、總務處'];
+    const describe = slides => slides.map((slide, index) => {
+      const text = normalize(slide.content?.textContent);
+      return {
+        page: index + 1,
+        title: slide.title,
+        含有處室: departments.filter(name => text.includes(name)),
+        案由: (text.match(/案由 \d+/g) || [])
+      };
+    });
+
+    reader.sections = Array.from(content.querySelectorAll('.reader-header'));
+    reader.tableOfContents = reader.sections.map(header => ({
+      text: header.textContent.trim(),
+      level: 2
+    }));
+    reader.shouldUseAiOriginalDepartmentToc = () => false;
+    const tocSlides = describe(reader.buildHtmlSlidesFromCurrentContent());
+
+    // 強制走 plan 路徑（跳過 TOC 判斷），看看用頂層索引能切出什麼。
+    const planSlides = describe(reader.buildHtmlSlidesWithoutToc(mainContent));
+
+    const contentRoot = reader.resolveHtmlSlideContentRoot(mainContent);
+    const units = reader.extractContentUnits(reader.createHtmlSlidePlanningRoot(mainContent));
+
+    return {
+      頂層子節點: Array.from(contentRoot.children).map(el => ({
+        tag: el.tagName,
+        cls: el.className,
+        文字開頭: normalize(el.textContent).slice(0, 18)
+      })),
+      可切點數: Array.from(contentRoot.children).length,
+      單元: units.map(u => ({ index: u.index, kind: u.kind, title: u.title, cost: u.cost })),
+      TOC路徑: tocSlides,
+      Plan路徑: planSlides
+    };
+  };
+
+  // 用燈箱把兩條路徑的差別直接看出來。forceNoToc = 假裝沒有 TOC，逼它走 plan 路徑。
+  window.__openEsaLightbox = async (forceNoToc, slideIndex = 0) => {
+    const fixture = fixtures.find(item => item.name === 'ESA 表格內區段標題');
+    mainContent.innerHTML = '';
+    const content = buildReaderContent(fixture.html);
+    mainContent.appendChild(content);
+    await waitForImages(mainContent);
+
+    reader.sections = Array.from(content.querySelectorAll('.reader-header'));
+    reader.tableOfContents = reader.sections.map(header => ({
+      text: header.textContent.trim(),
+      level: 2
+    }));
+    reader.shouldUseAiOriginalDepartmentToc = () => false;
+
+    const originalGetEntries = WebReader.prototype.getHtmlSlideTocEntries;
+    if (forceNoToc) reader.getHtmlSlideTocEntries = () => [];
+    reader.openHtmlSlidesLightbox();
+    reader.getHtmlSlideTocEntries = originalGetEntries;
+
+    reader.goToHtmlSlide(slideIndex);
+    const card = document.querySelector('.reader-slide-card.is-active');
+    return {
+      路徑: forceNoToc ? 'plan（頂層索引）' : 'TOC（Range）',
+      張數: document.querySelectorAll('.reader-slide-card').length,
+      本頁標題: card.querySelector('.reader-slide-title').textContent,
+      側邊導覽: Array.from(document.querySelectorAll('.reader-slides-toc-item')).map(b => b.textContent)
+    };
+  };
+
+  // 讓人工檢查真正的燈箱渲染與側邊導覽，不呼叫任何 AI。
+  reader.hasHtmlSlidesAiReady = () => true;
+  reader.applyHtmlSlidesTheme = () => {};
+  reader.showStatusNotification = message => console.log('[notify]', message);
+  reader.updateHtmlSlidesButtonState = () => {};
+  window.__openFixtureLightbox = async name => {
+    const fixture = fixtures.find(item => item.name === name) || fixtures[0];
+    mainContent.innerHTML = '';
+    const content = buildReaderContent(fixture.html);
+    mainContent.appendChild(content);
+    reader.sections = [];
+    reader.tableOfContents = [];
+    if (fixture.useToc) {
+      reader.sections = Array.from(content.querySelectorAll('.reader-header'));
+      reader.tableOfContents = reader.sections.map(header => ({
+        text: header.textContent.trim(),
+        level: 2
+      }));
+    }
+    await waitForImages(mainContent);
+    reader.openHtmlSlidesLightbox();
+  };
+
+  document.querySelectorAll('#harness-report tbody tr').forEach((row, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = '開啟燈箱';
+    button.onclick = () => window.__openFixtureLightbox(fixtures[index].name);
+    row.firstElementChild.appendChild(document.createElement('br'));
+    row.firstElementChild.appendChild(button);
+  });
+
+  // 供人工／CDP 量測燈箱實際渲染高度，藉此校準 maxCost。
+  window.__fixtureReader = reader;
+  window.__measureFixtureOverflow = async name => {
+    await window.__openFixtureLightbox(name);
+    const cards = Array.from(document.querySelectorAll('.reader-slide-card'));
+    return cards.map((card, index) => {
+      reader.goToHtmlSlide(index);
+      const body = card.querySelector('.reader-slide-body');
+      return {
+        slide: index + 1,
+        clientHeight: body.clientHeight,
+        scrollHeight: body.scrollHeight,
+        overflowRatio: body.clientHeight ? Number((body.scrollHeight / body.clientHeight).toFixed(2)) : 0
+      };
+    });
+  };
+
+  window.__htmlSlideFixtureResults = results;
+  console.log('[fixtures]', JSON.stringify(results, null, 2));
+})();
+</script>
+</body>
+</html>

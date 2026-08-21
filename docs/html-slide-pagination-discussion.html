@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PagePresenter HTML 簡報分頁品質討論整理</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --surface-soft: #f0f7f5;
+      --ink: #18212f;
+      --muted: #5f6b7a;
+      --line: #d8dee8;
+      --accent: #0f766e;
+      --accent-soft: #d9f0eb;
+      --warn: #9a3412;
+      --warn-soft: #ffedd5;
+      --danger: #991b1b;
+      --danger-soft: #fee2e2;
+      --blue: #1d4ed8;
+      --blue-soft: #dbeafe;
+      --shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif;
+      line-height: 1.7;
+      letter-spacing: 0;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 22px 56px;
+    }
+
+    header {
+      padding: 30px 0 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      color: #102a36;
+      font-size: 34px;
+      line-height: 1.22;
+    }
+
+    .lead {
+      max-width: 880px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 12px 0;
+      background: rgba(246, 247, 249, 0.94);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(216, 222, 232, 0.72);
+    }
+
+    nav a {
+      flex: 0 0 auto;
+      padding: 7px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    section {
+      margin-top: 26px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 24px;
+      line-height: 1.32;
+      color: #102a36;
+    }
+
+    h3 {
+      margin: 20px 0 8px;
+      font-size: 18px;
+      color: #102a36;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    ul,
+    ol {
+      padding-left: 1.4em;
+      margin: 10px 0;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #eef2f7;
+      color: #243447;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .summary-item {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+    }
+
+    .summary-item strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent);
+      font-size: 15px;
+    }
+
+    .callout {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border-left: 5px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+
+    .callout.warning {
+      border-left-color: var(--warn);
+      background: var(--warn-soft);
+    }
+
+    .callout.danger {
+      border-left-color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .comparison {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      overflow: hidden;
+      border-radius: 8px;
+    }
+
+    .comparison th,
+    .comparison td {
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    .comparison th {
+      background: #edf5f3;
+      color: #0f3f3a;
+      font-size: 15px;
+    }
+
+    .comparison td:first-child {
+      width: 22%;
+      font-weight: 800;
+      color: #243447;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 12px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 84px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+    }
+
+    .step-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      border-radius: 999px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-weight: 900;
+      font-size: 14px;
+    }
+
+    .step h3 {
+      margin-top: 0;
+    }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .decision {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+    }
+
+    .decision.accept {
+      border-color: #9dd6cb;
+      background: #f0fbf8;
+    }
+
+    .decision.reject {
+      border-color: #f5b99c;
+      background: #fff7ed;
+    }
+
+    .decision strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 16px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .flow div {
+      min-height: 112px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+    }
+
+    .flow b {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--accent);
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .tag {
+      display: inline-block;
+      margin: 2px 4px 2px 0;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #eef2f7;
+      color: #3c4858;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    footer {
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .summary,
+      .decision-grid,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+      }
+
+      section {
+        padding: 18px;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>HTML 簡報分頁品質：Codex 與 Claude 討論整理</h1>
+      <p class="lead">
+        這份文件把我們剛剛討論「如何提升 PagePresenter 轉成 HTML 簡報的分頁品質」整理成產品決策。重點不是技術炫技，而是讓你看懂：原本想法哪裡對、哪裡有風險、最後要怎麼做比較穩。
+      </p>
+      <div class="summary">
+        <div class="summary-item">
+          <strong>目前 MVP</strong>
+          HTML 簡報播放器已可用，但分頁主要還是靠現有 TOC/標題結構。
+        </div>
+        <div class="summary-item">
+          <strong>最大風險</strong>
+          AI 分頁若錨點對錯，會比現在 fallback 更糟，可能造成內容重複、遺漏或亂序。
+        </div>
+        <div class="summary-item">
+          <strong>最後方向</strong>
+          先建立 slide plan 渲染與驗證安全網，再接輕量 AI 分頁，不把它塞進既有大 AI 回應。
+        </div>
+      </div>
+    </header>
+
+    <nav aria-label="頁面導覽">
+      <a href="#background">背景</a>
+      <a href="#discussion">討論過程</a>
+      <a href="#claude">Claude 主要意見</a>
+      <a href="#decision">採納結論</a>
+      <a href="#roadmap">下一步路線</a>
+      <a href="#tests">驗證方式</a>
+    </nav>
+
+    <section id="background">
+      <h2>一、背景：MVP 已完成，但分頁品質還不是產品級</h2>
+      <p>
+        目前 PagePresenter 已經有「轉成 HTML 簡報」按鈕，會在現有頁面中用燈箱方式播放 HTML slides。這符合產品定位：快速、頁內可用、不強迫下載。
+      </p>
+      <p>
+        但目前的分頁方式仍主要依賴既有 DOM 的目錄與標題。這代表：
+      </p>
+      <ul>
+        <li><strong>AI 原文版</strong>看起來像 AI 分頁，其實多半只是沿用處室目錄。</li>
+        <li><strong>AI 精簡版</strong>雖已修掉「套錯原文目錄骨架」的 bug，但仍不是 AI 真正判斷簡報分頁。</li>
+        <li><strong>現階段可用</strong>，但遇到長段落、混合事項或同一處室過長時，簡報感會下降。</li>
+      </ul>
+      <div class="callout">
+        結論：播放器 MVP 已經站起來了，下一個真正的產品風險就是「分頁品質」。
+      </div>
+    </section>
+
+    <section id="discussion">
+      <h2>二、討論過程：原本想法如何被修正</h2>
+      <div class="timeline">
+        <div class="step">
+          <div class="step-label">Step 1</div>
+          <div>
+            <h3>Codex 原始企劃</h3>
+            <p>
+              原本我主張：在既有 AI 處理時，一次產生整理、重點、分頁。這樣按「轉成 HTML 簡報」時不用再呼叫 AI，速度最快。
+            </p>
+            <p>
+              設想資料是 <code>htmlSlidePlans.simplified</code> 與 <code>htmlSlidePlans.original</code>，每頁有標題、摘要、anchor hints、section refs。
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-label">Step 2</div>
+          <div>
+            <h3>Claude CLI 兩次失敗</h3>
+            <p>
+              我用 chat-mode CLI review 送給 Claude，但兩次都卡在 supervisor 需要的 final result event，分類為 <code>malformed_response</code>。因此不能把 partial output 當正式 Claude 意見。
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-label">Step 3</div>
+          <div>
+            <h3>Claude Desktop fallback</h3>
+            <p>
+              之後改用 Claude Desktop。中間有 UI 操作失誤與權限提示問題，最後由你手動送出並 bypass，Claude 完成了唯讀 review。
+            </p>
+            <p class="small">
+              Claude 回覆中也提醒：它看到一則「bypass permissions 模式啟用，請盡量改用 Bash」的訊息，但它認為與我們的 read-only envelope 衝突，因此沒有遵從。
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-label">Step 4</div>
+          <div>
+            <h3>Claude 的關鍵反駁</h3>
+            <p>
+              Claude 認為：不要把 slide plan 塞進既有 AI 大回應，因為會讓主功能「AI 精簡、AI 重點」的穩定性承擔分頁功能的風險。
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="claude">
+      <h2>三、Claude 主要意見：哪些地方值得聽</h2>
+      <table class="comparison">
+        <thead>
+          <tr>
+            <th>議題</th>
+            <th>Claude 的看法</th>
+            <th>我是否採納</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>開燈箱時呼叫 AI</td>
+            <td>反對。燈箱應該同步、快速開啟，任何 <code>await</code> 都破壞產品體感。</td>
+            <td>採納。按「轉成 HTML 簡報」時不呼叫 AI。</td>
+          </tr>
+          <tr>
+            <td>把 slide plan 塞進既有 AI 回應</td>
+            <td>反對。既有格式化/重點契約已經很重，再加 JSON 會增加截斷與解析失敗風險。</td>
+            <td>採納，並修正原企劃。</td>
+          </tr>
+          <tr>
+            <td>原文版 slide plan</td>
+            <td>原文版不是 AI 生成，而是本機 DOM clone 後做 highlight，所以 plan 應從本機 heading 清單建立。</td>
+            <td>採納。原文版重點只做「過長處室再切」。</td>
+          </tr>
+          <tr>
+            <td>錨定方式</td>
+            <td>不要靠自由文字 anchor hints 當主鍵，應以 <code>sectionIndex</code> 作為穩定主鍵。</td>
+            <td>採納。文字 title 只做校驗或顯示。</td>
+          </tr>
+          <tr>
+            <td>主題重排</td>
+            <td>v1 不做非相鄰重排，只允許相鄰合併與過長切分。</td>
+            <td>採納。避免內容重複、遺漏、順序錯亂。</td>
+          </tr>
+          <tr>
+            <td>快取版本</td>
+            <td>不要 bump 既有 <code>aiCachePromptVersion</code>，否則舊 AI 快取會全失效。</td>
+            <td>採納。slide plan 使用獨立 <code>aiSlidePlanVersion</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="decision">
+      <h2>四、最後採納的產品決策</h2>
+      <div class="decision-grid">
+        <div class="decision accept">
+          <strong>保留：開燈箱不呼叫 AI</strong>
+          使用者按下「轉成 HTML 簡報」時，必須立即進入播放，不等待 AI。
+        </div>
+        <div class="decision reject">
+          <strong>放棄：一次大 AI 回應包全部</strong>
+          原本想節省呼叫次數，但這會讓主要 AI 功能變脆弱，不值得。
+        </div>
+        <div class="decision accept">
+          <strong>改成：背景輕量 slide-plan call</strong>
+          AI 處理完成後，用 heading 清單做一個小型分頁規劃，不送全文。
+        </div>
+        <div class="decision accept">
+          <strong>安全網：validator + fallback</strong>
+          AI plan 壞掉時，不能比現在更糟；壞區段退回 TOC 分頁。
+        </div>
+      </div>
+
+      <div class="callout warning">
+        這裡和我們原先「盡量省 AI 呼叫」的想法有衝突。修正後的判斷是：可以多一個很小的 AI 呼叫，但不能把主 AI 整理/重點功能弄得容易失敗。
+      </div>
+
+      <h3>最後的 schema 方向</h3>
+      <p>Claude 建議 slide plan 先收斂成很小、很硬的格式：</p>
+      <pre><code>{
+  version: "simplified" | "original",
+  planVersion: "2026-xx",
+  slides: [
+    {
+      startSection: 0,
+      endSection: 2,
+      title: "教務處重點",
+      reason: "相鄰短段落合併"
+    }
+  ]
+}</code></pre>
+      <p>
+        重要的是 <code>startSection</code> 與 <code>endSection</code>，不是自由文字 anchor。這樣 AI 最壞只是切得不漂亮，不會把內容切丟。
+      </p>
+    </section>
+
+    <section id="roadmap">
+      <h2>五、下一步路線：先不急著接 AI</h2>
+      <p>
+        Claude 最重要的建議是：先建立安全的 plan 渲染管線，再接 AI。也就是先把地基做好，不要一開始就把 AI 接進來。
+      </p>
+      <div class="flow">
+        <div>
+          <b>S0</b>
+          量化目前分頁品質：頁數、每頁字數、超長頁比例。
+        </div>
+        <div>
+          <b>S1</b>
+          把現有 TOC fallback 轉成 slide plan，再由共同 renderer 渲染。
+        </div>
+        <div>
+          <b>S2</b>
+          建立 validator：檢查 gap、overlap、越界、重複、空頁。
+        </div>
+        <div>
+          <b>S3</b>
+          建立 AI 輸入：只送 heading 清單，不送全文。
+        </div>
+        <div>
+          <b>S4</b>
+          接獨立輕量 AI plan call，快取為選用欄位。
+        </div>
+      </div>
+
+      <h3>建議現在先做 S0-S2</h3>
+      <ul>
+        <li><strong>S0</strong> 讓我們知道現在的分頁到底哪裡不好。</li>
+        <li><strong>S1</strong> 是等價重構，使用者看到的結果不變，但架構變乾淨。</li>
+        <li><strong>S2</strong> 是保險絲，確保之後 AI plan 壞掉時不會炸掉簡報。</li>
+      </ul>
+      <p>
+        等 S0-S2 完成後，再做 S3-S4 接 AI。這樣每一步都可驗證，不會把問題全部揉在一起。
+      </p>
+    </section>
+
+    <section id="tests">
+      <h2>六、測試與驗證：怎麼知道它真的更好</h2>
+      <p>Claude 建議的驗證重點如下：</p>
+      <div>
+        <span class="tag">validator</span>
+        <span class="tag">fallback</span>
+        <span class="tag">cache</span>
+        <span class="tag">highlight DOM</span>
+        <span class="tag">prompt injection</span>
+      </div>
+      <ul>
+        <li>Validator 測試：gap、overlap、越界 index、非整數、start &gt; end、空 slides、超長頁。</li>
+        <li>Parser 測試：非 JSON、截斷 JSON、markdown code fence、多餘欄位、title 含 HTML。</li>
+        <li>DOM 測試：同一 plan 套在 normal 與 highlight DOM，heading 數不一致時要降級。</li>
+        <li>快取測試：舊 AI 快取沒有 slide plan 時仍有效，不要求使用者重跑完整 AI。</li>
+        <li>手動驗收：AI 精簡、AI 精簡重點、AI 原文、AI 原文重點四種狀態都能開燈箱。</li>
+      </ul>
+      <div class="callout">
+        實作時應優先檢查這些位置：<code>content.js</code> 的 <code>buildHtmlSlidesFromCurrentContent()</code>、<code>cloneHtmlSlideRange()</code>、AI cache、prompt 契約、TOC/sections 建構，以及 <code>updateContentDisplay()</code>。
+      </div>
+    </section>
+
+    <section>
+      <h2>七、用一句話總結</h2>
+      <p>
+        <strong>不要急著讓 AI 直接接管分頁；先把分頁變成可驗證的 slide plan，再讓 AI 只做小範圍、可失敗、可 fallback 的分頁建議。</strong>
+      </p>
+      <p>
+        這樣做比較不像一次豪賭，也比較符合 PagePresenter 的產品精神：快速、可靠、不讓 AI 失誤毀掉基本可用性。
+      </p>
+    </section>
+
+    <footer>
+      這份說明整理自 Codex 企劃、Claude Desktop read-only review，以及最後的採納判斷。它是產品決策說明，不是已實作規格。
+    </footer>
+  </div>
+</body>
+</html>

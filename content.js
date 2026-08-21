@@ -1246,8 +1246,7 @@ class WebReader {
 
     const entries = this.getHtmlSlideTocEntries(sourceRoot);
     if (entries.length === 0) {
-      const content = this.prepareHtmlSlideContent(sourceRoot.cloneNode(true));
-      return content ? [{ title: '簡報內容', content }] : [];
+      return this.buildHtmlSlidesWithoutToc(sourceRoot);
     }
 
     const slides = [];
@@ -1271,7 +1270,863 @@ class WebReader {
       }
     });
 
+    return this.finalizeHtmlSlides(slides, sourceRoot, 'toc-fallback');
+  }
+
+  buildHtmlSlidesWithoutToc(sourceRoot, options = {}) {
+    const contentRoot = this.createHtmlSlidePlanningRoot(sourceRoot, options);
+    const units = this.extractContentUnits(contentRoot);
+    const heuristicPlan = this.createHeuristicHtmlSlidePlan(units, options);
+    const fallbackPlan = this.createSingleHtmlSlidePlan(units);
+    const plan = this.validateAndRepairHtmlSlidePlan(heuristicPlan, units, fallbackPlan, options);
+    const slides = this.renderHtmlSlidesFromPlan(plan, contentRoot);
+    if (slides.length > 0) {
+      return this.finalizeHtmlSlides(slides, sourceRoot, plan.strategy || 'heuristic-plan', {
+        units,
+        plan
+      });
+    }
+
+    const content = this.prepareHtmlSlideContent(sourceRoot.cloneNode(true));
+    const fallbackSlides = content ? [{ title: '簡報內容', content }] : [];
+    return this.finalizeHtmlSlides(fallbackSlides, sourceRoot, 'single-page-fallback');
+  }
+
+  // 讀者內容通常包在單一 .reader-restructured-content 容器內，
+  // 直接對 #reader-main-content 取單元只會得到一個單元，因此先往下找真正的內容根節點，
+  // 再在離線副本上把過長的清單／段落群拆成相鄰兄弟節點，讓單元索引仍與 children 對齊。
+  createHtmlSlidePlanningRoot(sourceRoot, options = {}) {
+    const resolvedRoot = this.resolveHtmlSlideContentRoot(sourceRoot);
+    if (!resolvedRoot) return null;
+
+    const workingRoot = resolvedRoot.cloneNode(true);
+    this.copyRenderedMediaSizes(resolvedRoot, workingRoot);
+    this.splitOversizedContentGroups(workingRoot, this.getHtmlSlidePlanBudget(options).maxCost);
+    return workingRoot;
+  }
+
+  resolveHtmlSlideContentRoot(root, maxDepth = 4) {
+    let current = root;
+    for (let depth = 0; depth < maxDepth; depth++) {
+      const children = Array.from(current?.children || []);
+      if (children.length !== 1) break;
+      if (!this.isHtmlSlideContentWrapper(children[0])) break;
+      current = children[0];
+    }
+    return current;
+  }
+
+  isHtmlSlideContentWrapper(element) {
+    const tagName = String(element?.tagName || '').toUpperCase();
+    if (!['DIV', 'SECTION', 'ARTICLE', 'MAIN'].includes(tagName)) return false;
+    if ((element.children?.length || 0) === 0) return false;
+    return !this.elementMatches(
+      element,
+      '.reader-table-wrapper, .reader-media, .reader-attachment-card, .reader-paragraph-group, .reader-list'
+    );
+  }
+
+  splitOversizedContentGroups(root, maxCost = this.getHtmlSlidePlanBudget().maxCost) {
+    Array.from(root?.children || []).forEach(element => {
+      this.splitOversizedContentGroup(element, maxCost);
+      this.splitOversizedTableUnit(element, maxCost);
+    });
+    return root;
+  }
+
+  splitOversizedContentGroup(element, maxCost = this.getHtmlSlidePlanBudget().maxCost) {
+    if (!this.isSplittableContentGroup(element)) return 0;
+    if (this.estimateHtmlContentCost(element) <= maxCost) return 0;
+
+    const children = Array.from(element.children || []);
+    if (children.length < 2) return 0;
+
+    const chunks = [];
+    let currentChunk = [];
+    let currentCost = 0;
+    children.forEach(child => {
+      const childCost = this.estimateHtmlContentCost(child);
+      if (currentChunk.length > 0 && currentCost + childCost > maxCost) {
+        chunks.push(currentChunk);
+        currentChunk = [];
+        currentCost = 0;
+      }
+      currentChunk.push(child);
+      currentCost += childCost;
+    });
+    if (currentChunk.length > 0) chunks.push(currentChunk);
+    if (chunks.length < 2) return 0;
+
+    const isOrderedList = String(element.tagName || '').toUpperCase() === 'OL';
+    const listStart = isOrderedList ? Number(element.getAttribute('start') || 1) || 1 : 1;
+    let consumed = chunks[0].length;
+    let anchor = element;
+
+    chunks.slice(1).forEach(chunk => {
+      const clone = element.cloneNode(false);
+      // 續接的有序清單必須沿用原編號，否則拆頁後會從 1 重新數。
+      if (isOrderedList) clone.setAttribute('start', String(listStart + consumed));
+      chunk.forEach(child => clone.appendChild(child));
+      anchor.parentNode?.insertBefore(clone, anchor.nextSibling);
+      anchor = clone;
+      consumed += chunk.length;
+    });
+
+    return chunks.length - 1;
+  }
+
+  isSplittableContentGroup(element) {
+    return this.elementMatches(element, 'ul, ol, .reader-list, .reader-paragraph-group');
+  }
+
+  // 表格是原子單元，規劃器不會拆它；只有在明確安全時（無 rowspan、抓得到表頭）
+  // 才在離線副本上切成數個相鄰續表，避免整張大表擠成一張看不清的投影片。
+  splitOversizedTableUnit(element, maxCost = this.getHtmlSlidePlanBudget().maxCost) {
+    const table = this.getSplittableTable(element);
+    if (!table) return 0;
+    if (this.estimateHtmlContentCost(element) <= maxCost) return 0;
+
+    const rows = Array.from(table.rows || []);
+    const headerRowCount = this.countLeadingTableHeaderRows(rows);
+    const bodyRows = rows.slice(headerRowCount);
+    if (bodyRows.length < 2) return 0;
+
+    const headerRows = rows.slice(0, headerRowCount);
+    const caption = table.querySelector?.('caption') || null;
+    const layout = this.getHtmlSlideLayoutMetrics();
+    // 每段續表都會重新帶上表格自身的上下邊界、caption 與表頭，切分預算要一起算進去。
+    const headerCost = layout.tableCost +
+      (caption ? this.estimateTextBlockLayoutCost(this.getNormalizedContentText(caption), layout) : 0) +
+      headerRows.reduce((sum, row) => sum + this.estimateTableRowLayoutCost(row, layout), 0);
+    const chunks = [];
+    let currentChunk = [];
+    let currentCost = headerCost;
+
+    bodyRows.forEach(row => {
+      const rowCost = this.estimateTableRowLayoutCost(row, layout);
+      if (currentChunk.length > 0 && currentCost + rowCost > maxCost) {
+        chunks.push(currentChunk);
+        currentChunk = [];
+        currentCost = headerCost;
+      }
+      currentChunk.push(row);
+      currentCost += rowCost;
+    });
+    if (currentChunk.length > 0) chunks.push(currentChunk);
+    if (chunks.length < 2) return 0;
+
+    const isBareTable = element === table;
+    let anchor = element;
+
+    chunks.slice(1).forEach(chunk => {
+      const tableClone = table.cloneNode(false);
+      if (caption) tableClone.appendChild(caption.cloneNode(true));
+      headerRows.forEach(row => tableClone.appendChild(row.cloneNode(true)));
+      chunk.forEach(row => tableClone.appendChild(row));
+
+      let inserted = tableClone;
+      if (!isBareTable) {
+        const wrapperClone = element.cloneNode(false);
+        wrapperClone.appendChild(tableClone);
+        inserted = wrapperClone;
+      }
+
+      anchor.parentNode?.insertBefore(inserted, anchor.nextSibling);
+      anchor = inserted;
+    });
+
+    return chunks.length - 1;
+  }
+
+  getSplittableTable(element) {
+    const isBareTable = String(element?.tagName || '').toUpperCase() === 'TABLE';
+    const table = isBareTable ? element : element?.querySelector?.('table');
+    if (!table) return null;
+    // 只有一張表格時才安全；巢狀表格或跨列合併都直接放棄拆分。
+    if (this.elementQueryCount(element, 'table') > (isBareTable ? 0 : 1)) return null;
+    if (this.hasTableRowSpan(table)) return null;
+    return table;
+  }
+
+  hasTableRowSpan(table) {
+    return Array.from(table?.rows || []).some(row =>
+      Array.from(row.cells || []).some(cell => Number(cell.rowSpan) > 1)
+    );
+  }
+
+  countLeadingTableHeaderRows(rows) {
+    let count = 0;
+    for (const row of rows) {
+      const cells = Array.from(row.cells || []);
+      if (cells.length === 0) break;
+      if (!cells.every(cell => String(cell.tagName || '').toUpperCase() === 'TH')) break;
+      count++;
+    }
+    // 全表都是表頭時視為沒有表頭，避免續表複製整張表。
+    return count === rows.length ? 0 : count;
+  }
+
+  finalizeHtmlSlides(slides, sourceRoot, strategy, diagnostics = {}) {
+    const metrics = this.calculateHtmlSlideQualityMetrics(slides, sourceRoot, strategy, diagnostics);
+    this.recordHtmlSlideQualityMetrics(metrics);
     return slides;
+  }
+
+  calculateHtmlSlideQualityMetrics(slides, sourceRoot, strategy = 'unknown', diagnostics = {}) {
+    const normalizedSlides = Array.isArray(slides) ? slides : [];
+    const sourceText = this.getNormalizedContentText(sourceRoot);
+    // TOC 路徑沒有帶 plan diagnostics，仍要從真正的內容根節點取單元，
+    // 否則 unitCount 永遠是外層容器那一個，量測不到任何東西。
+    const units = diagnostics.units ||
+      this.extractContentUnits(this.resolveHtmlSlideContentRoot(sourceRoot));
+    const unitDiagnostics = this.createHtmlSlideUnitDiagnostics(units);
+    const planDiagnostics = this.createHtmlSlidePlanDiagnostics(diagnostics.plan);
+    const slideTextLengths = normalizedSlides.map(slide =>
+      this.getNormalizedContentText(slide?.content).length
+    );
+    const slideCosts = normalizedSlides.map(slide =>
+      this.estimateHtmlContentCost(slide?.content)
+    );
+    const totalCost = slideCosts.reduce((sum, cost) => sum + cost, 0);
+    const totalSlideTextLength = slideTextLengths.reduce((sum, length) => sum + length, 0);
+    const matchedSlideTitleTextLength = this.getMatchedHtmlSlideTitleTextLength(normalizedSlides, sourceText);
+    const adjustedSlideTextLength = totalSlideTextLength + matchedSlideTitleTextLength;
+    const textLengthDelta = sourceText.length - adjustedSlideTextLength;
+    const textMismatchTolerance = Math.max(8, Math.ceil(sourceText.length * 0.02));
+    const { targetCost, maxCost, minCost } = this.getHtmlSlidePlanBudget();
+
+    return {
+      strategy,
+      slideCount: normalizedSlides.length,
+      sourceTextLength: sourceText.length,
+      totalSlideTextLength,
+      matchedSlideTitleTextLength,
+      adjustedSlideTextLength,
+      textLengthDelta,
+      textMismatchTolerance,
+      possibleTextMismatch: Math.abs(textLengthDelta) > textMismatchTolerance,
+      slideTextLengths,
+      slideCosts,
+      minSlideCost: slideCosts.length ? Math.min(...slideCosts) : 0,
+      maxSlideCost: slideCosts.length ? Math.max(...slideCosts) : 0,
+      averageSlideCost: slideCosts.length ? Math.round(totalCost / slideCosts.length) : 0,
+      shortSlideCount: slideCosts.filter(cost => cost > 0 && cost < minCost).length,
+      overlongSlideCount: slideCosts.filter(cost => cost > maxCost).length,
+      targetCost,
+      maxCost,
+      ...unitDiagnostics,
+      ...planDiagnostics
+    };
+  }
+
+  recordHtmlSlideQualityMetrics(metrics) {
+    this.lastHtmlSlideQualityMetrics = metrics;
+    if (typeof window !== 'undefined' &&
+      typeof console !== 'undefined' &&
+      typeof console.debug === 'function') {
+      console.debug('[PagePresenter] HTML slide pagination metrics', metrics);
+    }
+  }
+
+  createHtmlSlideUnitDiagnostics(units) {
+    const normalizedUnits = Array.isArray(units) ? units.filter(Boolean) : [];
+    const unitCosts = normalizedUnits.map(unit => Math.max(0, Number(unit.cost) || 0));
+    const unitTotalCost = unitCosts.reduce((sum, cost) => sum + cost, 0);
+
+    return {
+      unitCount: normalizedUnits.length,
+      unitCosts,
+      unitTotalCost,
+      unitAverageCost: unitCosts.length ? Math.round(unitTotalCost / unitCosts.length) : 0,
+      unitMaxCost: unitCosts.length ? Math.max(...unitCosts) : 0,
+      unitKindCounts: this.countContentUnitValues(normalizedUnits, unit => unit.kind),
+      unitFlagCounts: this.countContentUnitValues(normalizedUnits, unit => unit.flags || [])
+    };
+  }
+
+  createHtmlSlidePlanDiagnostics(plan) {
+    if (!plan || !Array.isArray(plan.slides)) {
+      return {
+        planSlideCount: 0,
+        planTargetCost: null,
+        planMaxCost: null,
+        planMaxSlides: null
+      };
+    }
+
+    return {
+      planSlideCount: plan.slides.length,
+      planTargetCost: Number.isFinite(plan.targetCost) ? plan.targetCost : null,
+      planMaxCost: Number.isFinite(plan.maxCost) ? plan.maxCost : null,
+      planMaxSlides: Number.isFinite(plan.maxSlides) ? plan.maxSlides : null
+    };
+  }
+
+  countContentUnitValues(units, getter) {
+    const counts = {};
+    (Array.isArray(units) ? units : []).forEach(unit => {
+      const values = getter(unit);
+      (Array.isArray(values) ? values : [values]).forEach(value => {
+        if (!value) return;
+        counts[value] = (counts[value] || 0) + 1;
+      });
+    });
+    return counts;
+  }
+
+  // 只補償「真的被 removeDuplicateHtmlSlideHeading() 從內文拿掉」的標題。
+  // 圖說（figcaption）之類的標題仍留在內文裡，若一併補償會讓 possibleTextMismatch 誤報。
+  getMatchedHtmlSlideTitleTextLength(slides, sourceText) {
+    return (Array.isArray(slides) ? slides : []).reduce((matchedLength, slide) => {
+      const title = this.getNormalizedContentText({ textContent: slide?.title });
+      if (!title || !sourceText.includes(title)) return matchedLength;
+      if (this.getNormalizedContentText(slide?.content).includes(title)) return matchedLength;
+      return matchedLength + title.length;
+    }, 0);
+  }
+
+  createSingleHtmlSlidePlan(units, title = '簡報內容') {
+    if (!Array.isArray(units) || units.length === 0) {
+      return { strategy: 'single-page-fallback', slides: [] };
+    }
+
+    return {
+      strategy: 'single-page-fallback',
+      slides: [{
+        start: units[0].index,
+        end: units[units.length - 1].index,
+        title
+      }]
+    };
+  }
+
+  // 單一預算來源：由實際可視高度換算，而不是寫死的常數。
+  // safetyRatio 留給行高／邊界的估算誤差，確保投影片不需要捲動。
+  getHtmlSlidePlanBudget(options = {}) {
+    const layout = this.getHtmlSlideLayoutMetrics();
+    const fittingCost = Math.round(layout.contentHeight * layout.costPerPixel * 0.95);
+    const maxCost = options.maxCost || Math.max(2 * layout.lineCost, fittingCost);
+
+    return {
+      targetCost: options.targetCost || Math.round(maxCost * 0.75),
+      maxCost,
+      minCost: options.minCost || Math.round(maxCost * 0.18),
+      maxSlides: options.maxSlides || 24
+    };
+  }
+
+  createHeuristicHtmlSlidePlan(units, options = {}) {
+    const normalizedUnits = Array.isArray(units) ? units.filter(Boolean) : [];
+    if (normalizedUnits.length === 0) {
+      return { strategy: 'heuristic-plan', slides: [] };
+    }
+
+    const { targetCost, maxCost, minCost, maxSlides } = this.getHtmlSlidePlanBudget(options);
+    const slides = [];
+    let startIndex = 0;
+    let currentCost = 0;
+    let currentHasBody = false;
+
+    const closeSlideBefore = endPosition => {
+      if (endPosition < startIndex) return;
+      const slice = normalizedUnits.slice(startIndex, endPosition + 1);
+      slides.push({
+        start: slice[0].index,
+        end: slice[slice.length - 1].index,
+        title: this.getHtmlSlidePlanTitle(slice)
+      });
+    };
+
+    normalizedUnits.forEach((unit, position) => {
+      const unitCost = Math.max(0, Number(unit.cost) || 0);
+      // 只累積標題的區段不可自成一頁，否則會產生「只有標題、沒有內容」的空投影片。
+      const hasCurrent = position > startIndex && currentHasBody;
+      const shouldBreakForHeading = hasCurrent &&
+        unit.kind === 'heading' &&
+        currentCost >= minCost;
+      const shouldBreakForCost = hasCurrent &&
+        currentCost + unitCost > maxCost;
+
+      if (shouldBreakForHeading || shouldBreakForCost) {
+        closeSlideBefore(position - 1);
+        startIndex = position;
+        currentCost = 0;
+        currentHasBody = false;
+      }
+
+      currentCost += unitCost;
+      if (unit.kind !== 'heading') currentHasBody = true;
+    });
+
+    closeSlideBefore(normalizedUnits.length - 1);
+    const compactedSlides = this.compactHtmlSlidePlanToMaxSlides(slides, normalizedUnits, maxSlides);
+
+    return {
+      strategy: 'heuristic-plan',
+      targetCost,
+      maxCost,
+      maxSlides,
+      slides: compactedSlides
+    };
+  }
+
+  compactHtmlSlidePlanToMaxSlides(slides, units, maxSlides) {
+    const normalizedSlides = Array.isArray(slides) ? slides.map(slide => ({ ...slide })) : [];
+    const limit = Number.isInteger(maxSlides) && maxSlides > 0 ? maxSlides : normalizedSlides.length;
+    if (normalizedSlides.length <= limit) return normalizedSlides;
+
+    while (normalizedSlides.length > limit) {
+      let mergeIndex = 0;
+      let lowestCombinedCost = Infinity;
+      for (let index = 0; index < normalizedSlides.length - 1; index++) {
+        const first = normalizedSlides[index];
+        const second = normalizedSlides[index + 1];
+        const combinedUnits = this.getHtmlSlideUnitsInRange(units, first.start, second.end);
+        const combinedCost = this.getHtmlSlideUnitsCost(combinedUnits);
+        if (combinedCost < lowestCombinedCost) {
+          lowestCombinedCost = combinedCost;
+          mergeIndex = index;
+        }
+      }
+
+      const first = normalizedSlides[mergeIndex];
+      const second = normalizedSlides[mergeIndex + 1];
+      normalizedSlides.splice(mergeIndex, 2, {
+        start: first.start,
+        end: second.end,
+        title: first.title || second.title || null
+      });
+    }
+
+    return normalizedSlides;
+  }
+
+  // 沒有標題就回傳 null，讓燈箱沿用既有的「第 N 頁」遞補標題，
+  // 避免整份簡報的側邊導覽出現一整排相同的「簡報內容」。
+  getHtmlSlidePlanTitle(units) {
+    const normalizedUnits = Array.isArray(units) ? units.filter(Boolean) : [];
+    const heading = normalizedUnits.find(unit => unit.kind === 'heading' && unit.title);
+    if (heading) return heading.title;
+
+    // 圖說（figcaption）或表格 caption 只有在整張投影片就是那個物件時才拿來當標題，
+    // 否則「段落 + 圖」會被標成圖說，看起來像整頁都在講那張圖。
+    if (normalizedUnits.length === 1 && normalizedUnits[0].title) {
+      return normalizedUnits[0].title;
+    }
+    return null;
+  }
+
+  validateAndRepairHtmlSlidePlan(rawPlan, units, fallbackPlan = null, options = {}) {
+    const normalizedUnits = Array.isArray(units) ? units.filter(Boolean) : [];
+    const fallback = fallbackPlan || this.createSingleHtmlSlidePlan(normalizedUnits);
+    const maxCost = options.maxCost || rawPlan?.maxCost || fallback?.maxCost ||
+      this.getHtmlSlidePlanBudget().maxCost;
+    const maxSlides = options.maxSlides || rawPlan?.maxSlides || fallback?.maxSlides || 24;
+
+    if (normalizedUnits.length === 0) {
+      return { strategy: rawPlan?.strategy || 'empty-plan', slides: [] };
+    }
+    if (!this.isStructurallyValidHtmlSlidePlan(rawPlan, normalizedUnits)) {
+      return { ...fallback, strategy: `${fallback.strategy || 'fallback'}-after-invalid-plan` };
+    }
+
+    const inputSlides = rawPlan.slides.length > maxSlides
+      ? this.compactHtmlSlidePlanToMaxSlides(rawPlan.slides, normalizedUnits, maxSlides)
+      : rawPlan.slides;
+    const repairedSlides = [];
+    inputSlides.forEach(slide => {
+      const slideUnits = this.getHtmlSlideUnitsInRange(normalizedUnits, slide.start, slide.end);
+      const slideCost = this.getHtmlSlideUnitsCost(slideUnits);
+      if (slideCost <= maxCost || slideUnits.length <= 1) {
+        repairedSlides.push(slide);
+        return;
+      }
+
+      const repaired = this.createHeuristicHtmlSlidePlan(slideUnits, {
+        ...options,
+        maxCost,
+        maxSlides
+      });
+      repairedSlides.push(...repaired.slides);
+    });
+
+    return {
+      ...rawPlan,
+      maxSlides,
+      strategy: repairedSlides.length === rawPlan.slides.length
+        ? rawPlan.strategy
+        : `${rawPlan.strategy || 'plan'}-repaired`,
+      slides: repairedSlides
+    };
+  }
+
+  isStructurallyValidHtmlSlidePlan(plan, units) {
+    if (!plan || !Array.isArray(plan.slides)) return false;
+    if (!Array.isArray(units) || units.length === 0) return plan.slides.length === 0;
+    if (plan.slides.length === 0) return false;
+
+    const sortedUnits = [...units].sort((a, b) => a.index - b.index);
+    const firstIndex = sortedUnits[0].index;
+    const lastIndex = sortedUnits[sortedUnits.length - 1].index;
+    for (let index = 0; index < sortedUnits.length; index++) {
+      if (sortedUnits[index].index !== firstIndex + index) return false;
+    }
+
+    let expectedStart = firstIndex;
+
+    for (const slide of plan.slides) {
+      if (!Number.isInteger(slide?.start) || !Number.isInteger(slide?.end)) return false;
+      if (slide.start !== expectedStart) return false;
+      if (slide.end < slide.start || slide.end > lastIndex) return false;
+      expectedStart = slide.end + 1;
+    }
+
+    return expectedStart === lastIndex + 1;
+  }
+
+  getHtmlSlideUnitsCost(units) {
+    return (Array.isArray(units) ? units : [])
+      .reduce((sum, unit) => sum + Math.max(0, Number(unit?.cost) || 0), 0);
+  }
+
+  getHtmlSlideUnitsInRange(units, start, end) {
+    return (Array.isArray(units) ? units : []).filter(unit =>
+      unit && unit.index >= start && unit.index <= end
+    );
+  }
+
+  renderHtmlSlidesFromPlan(plan, sourceRoot) {
+    if (!sourceRoot || !Array.isArray(plan?.slides)) return [];
+
+    const children = Array.from(sourceRoot.children || []);
+    return plan.slides
+      .map(slide => {
+        const startNode = children[slide.start];
+        const endBeforeNode = children[slide.end + 1] || null;
+        if (!startNode) return null;
+
+        const fragment = this.cloneHtmlSlideRange(sourceRoot, startNode, endBeforeNode);
+        const title = slide.title || null;
+        const content = this.prepareHtmlSlideContent(fragment, title || '');
+        return content ? { title, content } : null;
+      })
+      .filter(Boolean);
+  }
+
+  extractContentUnits(contentDom, siteProfile = {}) {
+    const children = Array.from(contentDom?.children || []);
+    return children.map((element, index) =>
+      this.createContentUnitFromElement(element, index, siteProfile)
+    );
+  }
+
+  createContentUnitFromElement(element, index, siteProfile = {}) {
+    if (!element) return null;
+
+    const flags = this.getContentUnitFlags(element, siteProfile);
+    const headingLevel = this.getContentUnitHeadingLevel(element, siteProfile);
+    const kind = headingLevel
+      ? 'heading'
+      : this.isAtomicContentUnitElement(element, flags, siteProfile)
+        ? 'atomic'
+        : 'block';
+    const title = this.getContentUnitTitle(element, kind);
+    const preview = this.createContentUnitPreview(element.textContent || '');
+    const cost = this.estimateHtmlContentCost(element);
+
+    return {
+      index,
+      kind,
+      level: kind === 'heading' ? Math.max(1, Math.min(3, headingLevel)) : null,
+      title,
+      preview,
+      cost,
+      breakable: kind === 'block' && !flags.includes('metadata'),
+      flags
+    };
+  }
+
+  getContentUnitFlags(element, siteProfile = {}) {
+    const flags = new Set();
+    const addFlag = flag => {
+      if (flag) flags.add(flag);
+    };
+
+    if (this.elementMatches(element, '.reader-list, ul, ol') ||
+      this.elementQueryCount(element, '.reader-list, ul, ol') > 0) {
+      addFlag('list');
+    }
+    if (this.elementMatches(element, '.reader-table-wrapper, table') ||
+      this.elementQueryCount(element, '.reader-table-wrapper, table') > 0) {
+      addFlag('table');
+    }
+    if (this.elementMatches(element, '.reader-media, figure, img, video') ||
+      this.elementQueryCount(element, '.reader-media, figure, img, video') > 0) {
+      addFlag('media');
+    }
+    if (this.elementMatches(element, '.reader-esa-metadata, [data-reader-skip-ai-highlight="true"]') ||
+      siteProfile.isMetadata?.(element)) {
+      addFlag('metadata');
+    }
+    if (element?.dataset?.readerEsaSectionTitle === 'true' ||
+      this.elementMatches(element, '[data-reader-esa-section-title="true"]') ||
+      this.isDepartmentTocText(this.getNormalizedContentText(element))) {
+      addFlag('department');
+    }
+
+    const profileFlags = siteProfile.getFlags?.(element);
+    if (Array.isArray(profileFlags)) {
+      profileFlags.forEach(addFlag);
+    }
+
+    return Array.from(flags);
+  }
+
+  getContentUnitHeadingLevel(element, siteProfile = {}) {
+    const profileLevel = siteProfile.getHeadingLevel?.(element);
+    if (Number.isInteger(profileLevel) && profileLevel > 0) return profileLevel;
+    if (siteProfile.isHeading?.(element) === false) return null;
+
+    const tagName = String(element?.tagName || '').toLowerCase();
+    const tagMatch = tagName.match(/^h([1-6])$/);
+    if (tagMatch) return Number(tagMatch[1]);
+
+    if (this.elementMatches(element, '.reader-header, .reader-h1, .reader-h2, .reader-h3, .reader-h4, .reader-h5, .reader-h6')) {
+      return this.getHeaderLevel(element);
+    }
+
+    return null;
+  }
+
+  getContentUnitTitle(element, kind) {
+    if (!element) return null;
+    const normalize = value => this.getNormalizedContentText({ textContent: value });
+
+    if (kind === 'heading') {
+      return normalize(element.textContent) || null;
+    }
+
+    const caption = element.querySelector?.('caption, figcaption')?.textContent;
+    if (caption && normalize(caption)) return normalize(caption);
+
+    const ariaLabel = element.getAttribute?.('aria-label');
+    if (ariaLabel && normalize(ariaLabel)) return normalize(ariaLabel);
+
+    const singleHeaderCell = element.querySelector?.('.reader-table-section, th:only-child, td:only-child.reader-header');
+    if (singleHeaderCell && normalize(singleHeaderCell.textContent)) {
+      return normalize(singleHeaderCell.textContent);
+    }
+
+    return null;
+  }
+
+  isAtomicContentUnitElement(element, flags, siteProfile = {}) {
+    if (siteProfile.isAtomic?.(element)) return true;
+    return flags.includes('table') ||
+      flags.includes('media') ||
+      flags.includes('metadata') ||
+      this.elementMatches(element, '.reader-attachment-card');
+  }
+
+  createContentUnitPreview(text, headLength = 120, tailLength = 60) {
+    const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+    if (normalized.length <= headLength + tailLength + 12) return normalized;
+    return `${normalized.slice(0, headLength)} ... ${normalized.slice(-tailLength)}`;
+  }
+
+  // 版面成本以「渲染行數」為單位，不是字數。
+  // 字數模型會低估短區塊（換行浪費 + 每個區塊的邊界），實測純文字頁會溢出 2-3 個螢幕。
+  // 一行的成本刻意等於表格一列，讓文字與表格共用同一把尺。
+  // 常數是在 1536x739 的 Chrome 上實測燈箱渲染高度校準出來的（見 docs/html-slide-pagination-handoff.md）：
+  // 行高 42.56px、段落收合邊界約 13px、清單項目約 8px、表格列內距約 20px、表格上下邊界約 18px。
+  // 這些邊界在 CSS 裡是固定 px，所以換算成成本時要跟著 costPerPixel 走，而不是寫死。
+  getHtmlSlideLayoutMetrics() {
+    const viewportWidth = typeof window !== 'undefined' ? Number(window.innerWidth) || 0 : 0;
+    const viewportHeight = typeof window !== 'undefined' ? Number(window.innerHeight) || 0 : 0;
+    // styles.css 在 max-width: 760px 時把內文字級降到 22px。
+    const isCompact = viewportWidth > 0 && viewportWidth <= 760;
+    const fontSize = isCompact ? 22 : 28;
+    const bodyWidth = viewportWidth > 0
+      ? Math.max(240, viewportWidth - (isCompact ? 40 : 120))
+      : 1416;
+    // 扣掉燈箱外框、卡片標題列與內文區的上下 padding，剩下的才是真正能放內容的高度。
+    const contentHeight = viewportHeight > 0
+      ? Math.max(160, viewportHeight - (isCompact ? 118 : 134))
+      : 605;
+    // styles.css: .reader-image { max-height: 70vh; object-fit: contain }
+    const maxMediaHeight = viewportHeight > 0 ? viewportHeight * 0.7 : 517;
+    const lineCost = 80;
+    const costPerPixel = lineCost / (fontSize * 1.52);
+    const pixelCost = pixels => Math.round(pixels * costPerPixel);
+
+    return {
+      lineCost,
+      blockCost: pixelCost(13),
+      listItemCost: pixelCost(8),
+      tableRowCost: pixelCost(20),
+      tableCost: pixelCost(18),
+      // .reader-media 的上下邊界是 24px，且會穿過無邊框的容器往外收合。
+      mediaMarginCost: pixelCost(24) * 2,
+      // 讀不到圖片實際尺寸時的保底值，是唯一沒有量測依據的常數。
+      mediaCost: pixelCost(260),
+      charsPerLine: Math.max(10, Math.floor(bodyWidth / (fontSize * 1.07))),
+      costPerPixel,
+      bodyWidth,
+      maxMediaHeight,
+      contentHeight
+    };
+  }
+
+  estimateHtmlContentCost(element) {
+    return Math.max(0, Math.ceil(this.estimateHtmlLayoutCost(element)));
+  }
+
+  estimateHtmlLayoutCost(element) {
+    if (!element) return 0;
+    const layout = this.getHtmlSlideLayoutMetrics();
+
+    if (this.elementMatches(element, 'img, video, audio, iframe, figure, .reader-media')) {
+      return this.estimateMediaLayoutCost(element, layout);
+    }
+    if (this.elementMatches(element, 'table, .reader-table')) {
+      return this.estimateTableLayoutCost(element, layout);
+    }
+    if (this.elementMatches(element, 'tr, .reader-table-row')) {
+      return this.estimateTableRowLayoutCost(element, layout);
+    }
+
+    const blockChildren = Array.from(element.children || [])
+      .filter(child => this.isHtmlSlideLayoutBlock(child));
+    if (blockChildren.length === 0) {
+      const blockCost = this.elementMatches(element, 'li, .reader-list-item')
+        ? layout.listItemCost
+        : layout.blockCost;
+      return this.estimateTextBlockLayoutCost(this.getNormalizedContentText(element), layout, blockCost);
+    }
+
+    return blockChildren.reduce((sum, child) => sum + this.estimateHtmlLayoutCost(child), 0);
+  }
+
+  isHtmlSlideLayoutBlock(element) {
+    return this.elementMatches(element,
+      'p, div, section, article, header, footer, blockquote, pre, ' +
+      'h1, h2, h3, h4, h5, h6, ul, ol, li, dl, table, tr, figure, img, video, audio, iframe');
+  }
+
+  estimateTextBlockLayoutCost(text, layout = this.getHtmlSlideLayoutMetrics(), blockCost = layout.blockCost) {
+    const units = this.estimateTextLayoutCost(text);
+    if (units <= 0) return 0;
+    return Math.ceil(units / layout.charsPerLine) * layout.lineCost + blockCost;
+  }
+
+  estimateTableLayoutCost(element, layout = this.getHtmlSlideLayoutMetrics()) {
+    const table = String(element.tagName || '').toUpperCase() === 'TABLE'
+      ? element
+      : element.querySelector?.('table');
+    const rows = this.getTableLayoutRows(table);
+    if (rows.length === 0) {
+      return this.estimateTextBlockLayoutCost(this.getNormalizedContentText(element), layout);
+    }
+
+    const caption = table.querySelector?.('caption');
+    const captionCost = caption
+      ? this.estimateTextBlockLayoutCost(this.getNormalizedContentText(caption), layout)
+      : 0;
+    return layout.tableCost + captionCost +
+      rows.reduce((sum, row) => sum + this.estimateTableRowLayoutCost(row, layout), 0);
+  }
+
+  // 圖片高度取決於原始比例，不是固定值。離線副本裡的 <img> 還沒解碼，
+  // naturalWidth/naturalHeight 讀不到，所以先從畫面上已載入的原始節點把尺寸抄過來。
+  copyRenderedMediaSizes(liveRoot, workingRoot) {
+    const liveImages = Array.from(liveRoot?.querySelectorAll?.('img') || []);
+    const clonedImages = Array.from(workingRoot?.querySelectorAll?.('img') || []);
+    if (liveImages.length === 0 || liveImages.length !== clonedImages.length) return;
+
+    liveImages.forEach((liveImage, index) => {
+      const width = Number(liveImage.naturalWidth) || 0;
+      const height = Number(liveImage.naturalHeight) || 0;
+      if (width <= 0 || height <= 0) return;
+      clonedImages[index].dataset.readerMediaWidth = String(width);
+      clonedImages[index].dataset.readerMediaHeight = String(height);
+    });
+  }
+
+  estimateMediaLayoutCost(element, layout = this.getHtmlSlideLayoutMetrics()) {
+    const image = String(element.tagName || '').toUpperCase() === 'IMG'
+      ? element
+      : element.querySelector?.('img');
+    const caption = element.querySelector?.('figcaption');
+    const captionCost = caption
+      ? this.estimateTextBlockLayoutCost(this.getNormalizedContentText(caption), layout)
+      : 0;
+
+    const naturalWidth = Number(image?.dataset?.readerMediaWidth) || Number(image?.naturalWidth) || 0;
+    const naturalHeight = Number(image?.dataset?.readerMediaHeight) || Number(image?.naturalHeight) || 0;
+    if (naturalWidth <= 0 || naturalHeight <= 0) {
+      return layout.mediaCost + captionCost;
+    }
+
+    // styles.css 對投影片內的圖片是 max-width: 100%; height: auto，
+    // 但 .reader-image 另外壓了 max-height: 70vh，高圖不會照原始比例長高。
+    const renderedWidth = Math.min(layout.bodyWidth, naturalWidth);
+    const renderedHeight = Math.min(
+      naturalHeight * (renderedWidth / naturalWidth),
+      layout.maxMediaHeight
+    );
+    return Math.round(renderedHeight * layout.costPerPixel) + layout.mediaMarginCost + captionCost;
+  }
+
+  // 離線內容也可能用 .reader-table-row 這種非原生列，所以 rows 取不到時改用選擇器。
+  getTableLayoutRows(table) {
+    const nativeRows = Array.from(table?.rows || []);
+    if (nativeRows.length > 0) return nativeRows;
+    return Array.from(table?.querySelectorAll?.('tr, .reader-table-row') || []);
+  }
+
+  // 表格列不含段落邊界，但欄位會把可用寬度分掉，所以以最高的那一格決定列高。
+  estimateTableRowLayoutCost(row, layout = this.getHtmlSlideLayoutMetrics()) {
+    const cells = Array.from(row?.cells || []);
+    const parts = cells.length > 0 ? cells : Array.from(row?.children || []);
+    if (parts.length === 0) {
+      const units = this.estimateTextLayoutCost(this.getNormalizedContentText(row));
+      return Math.max(1, Math.ceil(units / layout.charsPerLine)) * layout.lineCost + layout.tableRowCost;
+    }
+
+    const cellCapacity = Math.max(4, Math.floor(layout.charsPerLine / parts.length));
+    const lines = parts.reduce((max, cell) => Math.max(
+      max,
+      Math.ceil(this.estimateTextLayoutCost(this.getNormalizedContentText(cell)) / cellCapacity)
+    ), 1);
+    return lines * layout.lineCost + layout.tableRowCost;
+  }
+
+  estimateTextLayoutCost(text) {
+    const normalized = String(text || '');
+    const cjkCount = (normalized.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+    const latinCount = (normalized.match(/[A-Za-z0-9]/g) || []).length;
+    const otherCount = Math.max(0, normalized.replace(/\s/g, '').length - cjkCount - latinCount);
+    return cjkCount + (latinCount / 3) + (otherCount / 2);
+  }
+
+  getNormalizedContentText(element) {
+    return String(element?.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  elementMatches(element, selector) {
+    try {
+      return Boolean(element?.matches?.(selector));
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  elementQueryCount(element, selector) {
+    try {
+      return element?.querySelectorAll?.(selector)?.length || 0;
+    } catch (_error) {
+      return 0;
+    }
   }
 
   getHtmlSlideTocEntries(sourceRoot) {
@@ -1323,9 +2178,12 @@ class WebReader {
     const expected = normalize(slideTitle);
     if (!expected) return;
 
-    const firstTextElement = Array.from(wrapper.children)
-      .find(element => normalize(element.textContent));
+    const textElements = Array.from(wrapper.children)
+      .filter(element => normalize(element.textContent));
+    const firstTextElement = textElements[0];
     if (!firstTextElement?.classList?.contains('reader-header')) return;
+    // 整張投影片只剩這個標題時不能刪，否則內容會變空、整頁被丟掉。
+    if (textElements.length <= 1) return;
     if (normalize(firstTextElement.textContent) === expected) {
       firstTextElement.remove();
     }

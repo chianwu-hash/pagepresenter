@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check": "node --check popup.js && node --check content.js && node --check background.js",
+    "test:html-slides": "node --test tests/html-slide-content-units.test.cjs tests/html-slide-generic-pagination.test.cjs",
     "build:extension": "node scripts/build-extension.mjs",
     "publish:cws:upload": "node scripts/publish-chrome-web-store.mjs upload",
     "publish:cws:submit": "node scripts/publish-chrome-web-store.mjs submit"
@@ -13,4 +14,3 @@
     "archiver": "^7.0.1"
   }
 }
-
