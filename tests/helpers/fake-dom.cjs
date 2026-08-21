@@ -188,3 +188,13 @@ function textElement(tagName, className, text) {
 }
 
 module.exports = { FakeElement, element, textElement };
+
+// content.js 產生區段標題時會呼叫 document.createElement，
+// vm sandbox 沒有 document，這裡給一個最小替身。
+function createFakeDocument() {
+  return {
+    createElement: tagName => new FakeElement({ tagName })
+  };
+}
+
+module.exports.createFakeDocument = createFakeDocument;

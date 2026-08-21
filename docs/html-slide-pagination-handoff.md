@@ -582,3 +582,79 @@ image slide scroll by ~19%, which is worse, so the alternation is deliberate.
 `npm run test:html-slides`: 38 tests pass. Six new tests cover aspect-ratio-based media
 cost, the `70vh` clamp, caption cost, the unknown-dimensions fallback,
 `copyRenderedMediaSizes()`, and the figcaption-title rule.
+
+---
+
+## S7: Hoisting ESA Section Rows Out Of Tables
+
+S6 showed the TOC path could not move to the plan contract because ESA section titles
+(一、教務處) live inside a table, at depth 4, and the contract addresses boundaries as
+indexes into `contentRoot.children`. This milestone removes that blocker.
+
+### What Changed
+
+`splitTableAtSectionRows(element)` runs in the planning clone, **before** the size-based
+splits (order matters — splitting by budget first cuts in the wrong places). It finds rows
+whose single cell carries `.reader-table-section` — the marker `processTable()` already
+adds for ESA section rows — and rewrites the table into:
+
+```text
+h2.reader-header.reader-h2   一、教務處     <- real top-level heading
+div.reader-table-wrapper     案由 1-4       <- that department's rows only
+h2 ...                       二、學務處
+div.reader-table-wrapper     ...
+```
+
+Rows before the first section row stay in the original table. The section row itself is
+removed once its text is hoisted into the `<h2>`, so the title still appears exactly once.
+Tables with `rowSpan` or nested tables are left alone, as before.
+
+`getHtmlSlidePlanTitle()` now prefers a heading flagged `department` over an earlier
+generic heading, so a slide covering 會議事項 -> 一、教務處 is labelled 一、教務處 and the
+department stays visible in the side navigation.
+
+### Measured Effect On ESA Content
+
+Same fixture, plan path forced (the real TOC path is untouched):
+
+| | before S7 | after S7 |
+|---|---|---|
+| top-level units | 2 (h2 + one table) | 7 (3 heading/table pairs + intro) |
+| slides | 2 | 3 |
+| page 2 title | 一、教務處 | 二、學務處 |
+| page 2 content | 學務處案由 3-4 **+ 總務處案由 1-4** | 學務處案由 1-4 |
+| side navigation | 會議事項, 一、教務處 | 一、教務處, 二、學務處, 三、總務處 |
+
+Before S7 the plan path mislabelled content: 學務處's items rendered under a repeated
+一、教務處 header row, and 二、學務處 disappeared as a label entirely. That is now correct.
+
+### Plan Path vs TOC Path On ESA Content
+
+| | TOC path (current) | plan path |
+|---|---|---|
+| slides | 4 | 3 |
+| page 1 | 會議事項 - **no content**, just the heading | 一、教務處 with 案由 1-4 |
+| 一、教務處 | own slide | merged with 會議事項 |
+| 二、學務處 / 三、總務處 | own slide each | own slide each |
+| side navigation | 會議事項 + 3 departments | 3 departments |
+
+The plan path is now equivalent or better: same per-department slides, no empty
+會議事項 slide, and every department present in the navigation.
+
+### Still Not Switched
+
+`buildHtmlSlidesFromCurrentContent()` still routes TOC pages through the Range-based path.
+Flipping it is a one-line change now, but it *is* a visible ESA behaviour change (4 slides
+becomes 3), so it is left as an explicit decision rather than a side effect of this work.
+
+Prerequisite still open before flipping: ESA tables with `rowSpan` are refused by
+`getSplittableTable()`, so their section boundaries remain unaddressable and would silently
+collapse into one slide. Either extend the splitter to handle row spans, or keep the Range
+path as a fallback whenever `splitTableAtSectionRows()` returns 0 on a table that contains
+section rows.
+
+### Tests
+
+44 tests pass. Six new: section rows hoisted in order, leading rows retained, the section
+row not duplicated, no-op on tables without section rows, no-op on `rowSpan` tables,
+department-boundary planning, and the department-title preference.

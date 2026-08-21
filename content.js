@@ -1327,11 +1327,94 @@ class WebReader {
   }
 
   splitOversizedContentGroups(root, maxCost = this.getHtmlSlidePlanBudget().maxCost) {
+    // 先做結構性切分，再做份量切分。順序不能反：
+    // 先照份量切，區段邊界就會被切在錯的地方，內容會掛到別的區段標題底下。
+    Array.from(root?.children || []).forEach(element => {
+      this.splitTableAtSectionRows(element);
+    });
     Array.from(root?.children || []).forEach(element => {
       this.splitOversizedContentGroup(element, maxCost);
       this.splitOversizedTableUnit(element, maxCost);
     });
     return root;
+  }
+
+  // ESA 會議記錄把區段標題（一、教務處）放在表格內的單格列，
+  // 但 plan 的邊界是頂層 children 的索引，指不到表格內部。
+  // 這裡在離線副本上把那些列提成真正的頂層 <h2> + 續表，讓區段邊界變成可定址的節點。
+  splitTableAtSectionRows(element) {
+    const table = this.getSplittableTable(element);
+    if (!table) return 0;
+
+    const rows = this.getTableLayoutRows(table);
+    const segments = [];
+    let currentSegment = { title: null, rows: [] };
+    rows.forEach(row => {
+      const title = this.getTableSectionTitle(row);
+      if (!title) {
+        currentSegment.rows.push(row);
+        return;
+      }
+      segments.push(currentSegment);
+      currentSegment = { title, titleRow: row, rows: [] };
+    });
+    segments.push(currentSegment);
+
+    const sectionSegments = segments.filter(segment => segment.title);
+    if (sectionSegments.length === 0) return 0;
+
+    const caption = table.querySelector?.('caption') || null;
+    const isBareTable = element === table;
+    const buildPart = segmentRows => {
+      const tableClone = table.cloneNode(false);
+      if (caption) tableClone.appendChild(caption.cloneNode(true));
+      segmentRows.forEach(row => tableClone.appendChild(row));
+      if (isBareTable) return tableClone;
+      const wrapperClone = element.cloneNode(false);
+      wrapperClone.appendChild(tableClone);
+      return wrapperClone;
+    };
+
+    const parent = element.parentNode;
+    let anchor = element;
+    let addedCount = 0;
+
+    sectionSegments.forEach(segment => {
+      const heading = this.createHtmlSlideElement('h2');
+      if (!heading) return;
+      heading.className = 'reader-header reader-h2 reader-generated-section';
+      heading.setAttribute('data-reader-generated-section', 'true');
+      heading.textContent = segment.title;
+      // 標題文字已經搬到 <h2>，原本那一列必須拿掉，否則內容會重複一次。
+      segment.titleRow?.remove?.();
+      parent?.insertBefore(heading, anchor.nextSibling);
+      anchor = heading;
+      addedCount++;
+
+      if (segment.rows.length === 0) return;
+      const part = buildPart(segment.rows);
+      parent?.insertBefore(part, anchor.nextSibling);
+      anchor = part;
+      addedCount++;
+    });
+
+    // 第一個區段標題之前沒有任何列時，原本的表格會變成空殼，直接移掉。
+    if (segments[0].rows.length === 0) element.remove?.();
+
+    return addedCount;
+  }
+
+  getTableSectionTitle(row) {
+    const cells = Array.from(row?.cells || []);
+    const parts = cells.length > 0 ? cells : Array.from(row?.children || []);
+    if (parts.length !== 1) return null;
+    if (!this.elementMatches(parts[0], '.reader-table-section')) return null;
+    return this.getNormalizedContentText(parts[0]) || null;
+  }
+
+  createHtmlSlideElement(tagName) {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+    return document.createElement(tagName);
   }
 
   splitOversizedContentGroup(element, maxCost = this.getHtmlSlidePlanBudget().maxCost) {
@@ -1705,6 +1788,12 @@ class WebReader {
   // 避免整份簡報的側邊導覽出現一整排相同的「簡報內容」。
   getHtmlSlidePlanTitle(units) {
     const normalizedUnits = Array.isArray(units) ? units.filter(Boolean) : [];
+    // 處室標題（一、教務處）是 ESA 的導覽單位，比它前面的泛用標題更適合當頁名，
+    // 否則整份會議記錄的側邊導覽會漏掉第一個處室。
+    const department = normalizedUnits.find(unit =>
+      unit.kind === 'heading' && unit.title && (unit.flags || []).includes('department'));
+    if (department) return department.title;
+
     const heading = normalizedUnits.find(unit => unit.kind === 'heading' && unit.title);
     if (heading) return heading.title;
 

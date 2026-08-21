@@ -4,7 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const { FakeElement } = require('./helpers/fake-dom.cjs');
+const { FakeElement, createFakeDocument } = require('./helpers/fake-dom.cjs');
 
 function loadWebReader() {
   const filename = path.resolve(__dirname, '../content.js');
@@ -13,7 +13,9 @@ function loadWebReader() {
     exports: {},
     console,
     setTimeout,
-    clearTimeout
+    clearTimeout,
+    // 沒有 window，版面度量會落到校準過的預設值，期望值才是可決定的。
+    document: createFakeDocument()
   };
 
   vm.runInNewContext(fs.readFileSync(filename, 'utf8'), sandbox, { filename });
@@ -537,4 +539,160 @@ test('圖說只有在整張投影片就是那張圖時才拿來當標題', () =>
   assert.equal(reader.getHtmlSlidePlanTitle([figureUnit]), '示意圖 1');
   assert.equal(reader.getHtmlSlidePlanTitle([paragraphUnit, figureUnit]), null);
   assert.equal(reader.getHtmlSlidePlanTitle([headingUnit, figureUnit]), '一、說明');
+});
+
+// ---------------------------------------------------------------------------
+// ESA：把表格內的區段標題列提到頂層，讓區段邊界能用 children 索引定址
+// ---------------------------------------------------------------------------
+
+function sectionRow(title) {
+  const cell = new FakeElement({
+    tagName: 'td',
+    className: 'reader-table-cell reader-header reader-h2 reader-table-section',
+    text: title
+  });
+  return new FakeElement({ tagName: 'tr', className: 'reader-table-row', children: [cell] });
+}
+
+function caseRow(index) {
+  return tableRow([
+    tableCell('td', `案由 ${index}`),
+    tableCell('td', '承辦單位'),
+    tableCell('td', '請於期限內完成並回報辦理情形')
+  ]);
+}
+
+function createEsaTableWrapper(departments, leadingRows = []) {
+  const rows = [...leadingRows];
+  departments.forEach(name => {
+    rows.push(sectionRow(name));
+    for (let index = 1; index <= 2; index++) rows.push(caseRow(index));
+  });
+  return new FakeElement({
+    tagName: 'div',
+    className: 'reader-table-wrapper',
+    children: [new FakeElement({ tagName: 'table', className: 'reader-table', children: rows })]
+  });
+}
+
+test('表格內的區段標題列被提成頂層 <h2> + 續表，順序不變', () => {
+  const reader = createReader();
+  const wrapper = createEsaTableWrapper(['一、教務處', '二、學務處', '三、總務處']);
+  const root = new FakeElement({ tagName: 'div', children: [wrapper] });
+
+  reader.splitTableAtSectionRows(wrapper);
+
+  const shape = root.children.map(child => ({
+    tag: child.tagName,
+    text: child.tagName === 'H2'
+      ? child.textContent
+      : child.textContent.replace(/\s+/g, ' ').trim().slice(0, 4)
+  }));
+  assert.deepEqual(plain(shape), [
+    { tag: 'H2', text: '一、教務處' },
+    { tag: 'DIV', text: '案由 1' },
+    { tag: 'H2', text: '二、學務處' },
+    { tag: 'DIV', text: '案由 1' },
+    { tag: 'H2', text: '三、總務處' },
+    { tag: 'DIV', text: '案由 1' }
+  ]);
+
+  // 區段標題只能出現一次：搬到 <h2> 之後，原本那一列要消失。
+  assert.equal(root.textContent.split('一、教務處').length - 1, 1);
+
+  // 提出來的標題是真的 heading 單元，續表不再夾帶別的區段。
+  const units = reader.extractContentUnits(root);
+  assert.deepEqual(plain(units.map(unit => unit.kind)),
+    ['heading', 'atomic', 'heading', 'atomic', 'heading', 'atomic']);
+  assert.deepEqual(plain(units.filter(unit => unit.kind === 'heading').map(unit => unit.title)),
+    ['一、教務處', '二、學務處', '三、總務處']);
+});
+
+test('第一個區段標題之前的列留在原本的表格裡', () => {
+  const reader = createReader();
+  const leading = [caseRow(97), caseRow(98)];
+  const wrapper = createEsaTableWrapper(['一、教務處'], leading);
+  const root = new FakeElement({ tagName: 'div', children: [wrapper] });
+
+  reader.splitTableAtSectionRows(wrapper);
+
+  assert.equal(root.children[0], wrapper, '原表格保留在原位');
+  assert.equal(wrapper.querySelector('table').rows.length, 2, '只留下區段標題前的列');
+  assert.match(wrapper.textContent, /案由 97/);
+  assert.equal(root.children[1].tagName, 'H2');
+  assert.equal(root.children[1].textContent, '一、教務處');
+});
+
+test('沒有區段標題列的表格完全不動', () => {
+  const reader = createReader();
+  const wrapper = new FakeElement({
+    tagName: 'div',
+    className: 'reader-table-wrapper',
+    children: [new FakeElement({
+      tagName: 'table',
+      className: 'reader-table',
+      children: [caseRow(1), caseRow(2), caseRow(3)]
+    })]
+  });
+  const root = new FakeElement({ tagName: 'div', children: [wrapper] });
+
+  assert.equal(reader.splitTableAtSectionRows(wrapper), 0);
+  assert.equal(root.children.length, 1);
+  assert.equal(wrapper.querySelector('table').rows.length, 3);
+});
+
+test('含 rowspan 的表格不做區段切分，維持原子單元', () => {
+  const reader = createReader();
+  const wrapper = createEsaTableWrapper(['一、教務處', '二、學務處']);
+  const spanned = wrapper.querySelector('table').rows[1].cells[0];
+  spanned.setAttribute('rowspan', '2');
+  const root = new FakeElement({ tagName: 'div', children: [wrapper] });
+
+  assert.equal(reader.splitTableAtSectionRows(wrapper), 0);
+  assert.equal(root.children.length, 1);
+});
+
+test('區段切分讓規劃器切在處室邊界，而不是切在列數預算上', () => {
+  const reader = createReader();
+  const departments = ['一、教務處', '二、學務處', '三、總務處'];
+  const mainContent = createReaderMainContent([createEsaTableWrapper(departments)]);
+
+  const contentRoot = reader.createHtmlSlidePlanningRoot(mainContent);
+  const units = reader.extractContentUnits(contentRoot);
+  const plan = reader.validateAndRepairHtmlSlidePlan(
+    reader.createHeuristicHtmlSlidePlan(units),
+    units,
+    reader.createSingleHtmlSlidePlan(units)
+  );
+
+  assert.ok(reader.isStructurallyValidHtmlSlidePlan(plan, units));
+  // 每一張投影片最多只能碰到一個處室，內容不可以掛到別的處室標題底下。
+  plan.slides.forEach(slide => {
+    const text = reader.getHtmlSlideUnitsInRange(units, slide.start, slide.end)
+      .map(unit => `${unit.title || ''} ${unit.preview || ''}`)
+      .join(' ');
+    const touched = departments.filter(name => text.includes(name));
+    assert.ok(touched.length <= 1, `一張投影片碰到多個處室: ${touched.join(', ')}`);
+  });
+  assert.deepEqual(
+    plain(plan.slides.map(slide => slide.title)),
+    plain(departments),
+    '每個處室各自成頁，標題與內容一致'
+  );
+});
+
+test('處室標題優先當頁名，前面的泛用標題不會把它從導覽中擠掉', () => {
+  const reader = createReader();
+  const withDepartment = [
+    { index: 0, kind: 'heading', title: '會議事項', cost: 104, flags: [] },
+    { index: 1, kind: 'heading', title: '一、教務處', cost: 104, flags: ['department'] },
+    { index: 2, kind: 'atomic', title: null, cost: 506, flags: ['table'] }
+  ];
+  const withoutDepartment = [
+    { index: 0, kind: 'heading', title: '會議事項', cost: 104, flags: [] },
+    { index: 1, kind: 'heading', title: '背景說明', cost: 104, flags: [] }
+  ];
+
+  assert.equal(reader.getHtmlSlidePlanTitle(withDepartment), '一、教務處');
+  assert.equal(reader.getHtmlSlidePlanTitle(withoutDepartment), '會議事項');
 });
