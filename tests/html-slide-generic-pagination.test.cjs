@@ -696,3 +696,98 @@ test('處室標題優先當頁名，前面的泛用標題不會把它從導覽�
   assert.equal(reader.getHtmlSlidePlanTitle(withDepartment), '一、教務處');
   assert.equal(reader.getHtmlSlidePlanTitle(withoutDepartment), '會議事項');
 });
+
+// ---------------------------------------------------------------------------
+// TOC 邊界改走 plan 路徑，表達不了時退回 Range 路徑
+// ---------------------------------------------------------------------------
+
+function tocEntry(text, sectionIndex) {
+  return { item: { text, level: 2 }, sectionIndex };
+}
+
+test('createTocHtmlSlidePlan 把 TOC 項目對回頂層標題，並覆蓋所有單元', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'heading', title: '會議事項', cost: 104, flags: [] },
+    { index: 1, kind: 'heading', title: '一、教務處', cost: 104, flags: ['department'] },
+    { index: 2, kind: 'atomic', title: null, cost: 506, flags: ['table'] },
+    { index: 3, kind: 'heading', title: '二、學務處', cost: 104, flags: ['department'] },
+    { index: 4, kind: 'atomic', title: null, cost: 506, flags: ['table'] }
+  ];
+  const entries = [tocEntry('一、教務處', 1), tocEntry('二、學務處', 3)];
+
+  const plan = reader.createTocHtmlSlidePlan(entries, units);
+
+  assert.equal(plan.strategy, 'toc-plan');
+  assert.deepEqual(plain(plan.slides), [
+    { start: 0, end: 0, title: '會議資訊' },
+    { start: 1, end: 2, title: '一、教務處' },
+    { start: 3, end: 4, title: '二、學務處' }
+  ]);
+  assert.ok(reader.isStructurallyValidHtmlSlidePlan(plan, units));
+});
+
+test('TOC 項目在頂層找不到對應標題時回傳 null，讓呼叫端退回 Range 路徑', () => {
+  const reader = createReader();
+  // 區段標題還埋在表格裡（例如含 rowspan 沒被提出來），頂層只有一個原子單元。
+  const units = [
+    { index: 0, kind: 'heading', title: '會議事項', cost: 104, flags: [] },
+    { index: 1, kind: 'atomic', title: null, cost: 1500, flags: ['table'] }
+  ];
+  const entries = [tocEntry('一、教務處', 1), tocEntry('二、學務處', 2)];
+
+  assert.equal(reader.createTocHtmlSlidePlan(entries, units), null);
+});
+
+test('TOC 項目順序對不上頂層標題順序時也退回 Range 路徑', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'heading', title: '一、教務處', cost: 104, flags: ['department'] },
+    { index: 1, kind: 'atomic', title: null, cost: 506, flags: ['table'] },
+    { index: 2, kind: 'heading', title: '二、學務處', cost: 104, flags: ['department'] },
+    { index: 3, kind: 'atomic', title: null, cost: 506, flags: ['table'] }
+  ];
+  const reversed = [tocEntry('二、學務處', 2), tocEntry('一、教務處', 0)];
+
+  assert.equal(reader.createTocHtmlSlidePlan(reversed, units), null);
+});
+
+test('第一個 TOC 項目就是第一個單元時不另外產生前言頁', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'heading', title: '一、教務處', cost: 104, flags: ['department'] },
+    { index: 1, kind: 'atomic', title: null, cost: 506, flags: ['table'] }
+  ];
+
+  const plan = reader.createTocHtmlSlidePlan([tocEntry('一、教務處', 0)], units);
+
+  assert.deepEqual(plain(plan.slides), [{ start: 0, end: 1, title: '一、教務處' }]);
+});
+
+test('過長的 TOC 段落被拆開，續頁沿用原標題並編號', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'heading', title: '一、教務處', cost: 104, flags: ['department'] },
+    { index: 1, kind: 'atomic', title: null, cost: 900, flags: ['table'] },
+    { index: 2, kind: 'atomic', title: null, cost: 900, flags: ['table'] },
+    { index: 3, kind: 'atomic', title: null, cost: 900, flags: ['table'] }
+  ];
+  const tocPlan = reader.createTocHtmlSlidePlan([tocEntry('一、教務處', 0)], units);
+
+  const plan = reader.validateAndRepairHtmlSlidePlan(tocPlan, units, null, { maxCost: 1080 });
+
+  assert.equal(plan.strategy, 'toc-plan-repaired');
+  assert.deepEqual(plain(plan.slides.map(slide => slide.title)), [
+    '一、教務處',
+    '一、教務處（續 1）',
+    '一、教務處（續 2）'
+  ]);
+  assert.ok(reader.isStructurallyValidHtmlSlidePlan(plan, units));
+});
+
+test('只有一個續頁時不加編號', () => {
+  const reader = createReader();
+  assert.equal(reader.getContinuedHtmlSlideTitle('一、教務處', 1, 1), '一、教務處（續）');
+  assert.equal(reader.getContinuedHtmlSlideTitle('一、教務處', 2, 3), '一、教務處（續 2）');
+  assert.equal(reader.getContinuedHtmlSlideTitle(null, 1, 1), null);
+});

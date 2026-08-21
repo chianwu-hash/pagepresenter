@@ -1249,6 +1249,13 @@ class WebReader {
       return this.buildHtmlSlidesWithoutToc(sourceRoot);
     }
 
+    // TOC 邊界只要能用頂層索引表示，就走跟一般頁面同一條 plan 路徑，
+    // 過長的段落才有機會被拆開。表達不了（例如帶 rowSpan 的表格）就退回 Range 路徑。
+    return this.buildHtmlSlidesFromTocPlan(sourceRoot, entries) ||
+      this.buildHtmlSlidesFromTocRanges(sourceRoot, entries);
+  }
+
+  buildHtmlSlidesFromTocRanges(sourceRoot, entries) {
     const slides = [];
     const firstSection = this.sections[entries[0].sectionIndex];
     if (firstSection && sourceRoot.firstChild && sourceRoot.firstChild !== firstSection) {
@@ -1271,6 +1278,78 @@ class WebReader {
     });
 
     return this.finalizeHtmlSlides(slides, sourceRoot, 'toc-fallback');
+  }
+
+  buildHtmlSlidesFromTocPlan(sourceRoot, entries, options = {}) {
+    const contentRoot = this.createHtmlSlidePlanningRoot(sourceRoot, options);
+    const units = this.extractContentUnits(contentRoot);
+    const tocPlan = this.createTocHtmlSlidePlan(entries, units);
+    if (!tocPlan) return null;
+
+    const plan = this.validateAndRepairHtmlSlidePlan(
+      tocPlan,
+      units,
+      this.createSingleHtmlSlidePlan(units),
+      // TOC 的每一段都是使用者看得見的導覽項目，不可以被 maxSlides 合併掉。
+      { ...options, maxSlides: options.maxSlides || Math.max(24, tocPlan.slides.length + 12) }
+    );
+    const slides = this.renderHtmlSlidesFromPlan(plan, contentRoot);
+    if (slides.length === 0) return null;
+
+    return this.finalizeHtmlSlides(slides, sourceRoot, plan.strategy || 'toc-plan', {
+      units,
+      plan
+    });
+  }
+
+  // 把 TOC 項目對回頂層標題單元。任何一項對不上就回傳 null，
+  // 讓呼叫端退回原本的 Range 路徑，而不是靜默丟掉那個邊界。
+  createTocHtmlSlidePlan(entries, units) {
+    const normalizedUnits = Array.isArray(units) ? units.filter(Boolean) : [];
+    if (normalizedUnits.length === 0 || !Array.isArray(entries) || entries.length === 0) return null;
+
+    const headings = normalizedUnits
+      .filter(unit => unit.kind === 'heading' && unit.title)
+      .map(unit => ({
+        index: unit.index,
+        title: this.getNormalizedContentText({ textContent: unit.title })
+      }));
+
+    const starts = [];
+    let cursor = 0;
+    for (const entry of entries) {
+      const text = this.getNormalizedContentText({ textContent: entry?.item?.text });
+      if (!text) return null;
+
+      let matched = -1;
+      for (let index = cursor; index < headings.length; index++) {
+        if (headings[index].title === text) {
+          matched = index;
+          break;
+        }
+      }
+      if (matched < 0) return null;
+
+      starts.push(headings[matched]);
+      cursor = matched + 1;
+    }
+
+    const firstIndex = normalizedUnits[0].index;
+    const lastIndex = normalizedUnits[normalizedUnits.length - 1].index;
+    const slides = [];
+    if (starts[0].index > firstIndex) {
+      slides.push({ start: firstIndex, end: starts[0].index - 1, title: '會議資訊' });
+    }
+    starts.forEach((start, index) => {
+      const next = starts[index + 1];
+      slides.push({
+        start: start.index,
+        end: next ? next.index - 1 : lastIndex,
+        title: start.title
+      });
+    });
+
+    return { strategy: 'toc-plan', slides };
   }
 
   buildHtmlSlidesWithoutToc(sourceRoot, options = {}) {
@@ -1786,6 +1865,12 @@ class WebReader {
 
   // 沒有標題就回傳 null，讓燈箱沿用既有的「第 N 頁」遞補標題，
   // 避免整份簡報的側邊導覽出現一整排相同的「簡報內容」。
+  getContinuedHtmlSlideTitle(title, sequence = 1, total = 1) {
+    const normalized = this.getNormalizedContentText({ textContent: title });
+    if (!normalized) return null;
+    return total > 1 ? `${normalized}（續 ${sequence}）` : `${normalized}（續）`;
+  }
+
   getHtmlSlidePlanTitle(units) {
     const normalizedUnits = Array.isArray(units) ? units.filter(Boolean) : [];
     // 處室標題（一、教務處）是 ESA 的導覽單位，比它前面的泛用標題更適合當頁名，
@@ -1836,7 +1921,17 @@ class WebReader {
         maxCost,
         maxSlides
       });
-      repairedSlides.push(...repaired.slides);
+      // 被拆開的續頁沿用原標題加「（續）」，
+      // 否則側邊導覽會在處室之間插進一排看不出歸屬的「第 N 頁」。
+      const baseTitle = slide.title || repaired.slides[0]?.title || null;
+      const continuationCount = repaired.slides.length - 1;
+      repairedSlides.push(...repaired.slides.map((part, index) => ({
+        ...part,
+        title: part.title ||
+          (index === 0
+            ? baseTitle
+            : this.getContinuedHtmlSlideTitle(baseTitle, index, continuationCount))
+      })));
     });
 
     return {

@@ -398,9 +398,9 @@ test('validator repairs overlong multi-unit slides with heuristic slices', () =>
   const plan = reader.validateAndRepairHtmlSlidePlan(rawPlan, units);
 
   assert.equal(plan.strategy, 'ai-plan-repaired');
-  // 沒有標題的續頁保持 title: null，燈箱會顯示「第 N 頁」。
+  // 被拆開的續頁沿用原標題加「（續）」，導覽才看得出歸屬。
   assert.deepEqual(plain(plan.slides), [
     { start: 0, end: 1, title: '一、長文' },
-    { start: 2, end: 3, title: null }
+    { start: 2, end: 3, title: '一、長文（續）' }
   ]);
 });

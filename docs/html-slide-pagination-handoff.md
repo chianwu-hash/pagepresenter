@@ -658,3 +658,95 @@ section rows.
 44 tests pass. Six new: section rows hoisted in order, leading rows retained, the section
 row not duplicated, no-op on tables without section rows, no-op on `rowSpan` tables,
 department-boundary planning, and the department-title preference.
+
+---
+
+## S8: TOC Path Switched To The Plan Contract, With A Range Fallback
+
+### Routing
+
+`buildHtmlSlidesFromCurrentContent()` now tries the plan path for TOC pages and falls back
+to the original Range path when the boundaries cannot be represented:
+
+```text
+entries.length === 0            -> buildHtmlSlidesWithoutToc()      (heuristic-plan)
+buildHtmlSlidesFromTocPlan()    -> toc-plan / toc-plan-repaired
+  returns null                  -> buildHtmlSlidesFromTocRanges()   (toc-fallback)
+```
+
+`buildHtmlSlidesFromTocRanges()` is the previous implementation, moved verbatim. Nothing
+about it changed, so the fallback is the exact behaviour that shipped before.
+
+### The Capability Check
+
+`createTocHtmlSlidePlan(entries, units)` matches every TOC entry's text against the
+top-level heading units of the normalized planning root, in order, and returns `null` the
+moment one does not match. Only when all entries match does it emit a plan whose slide
+boundaries are exactly the TOC boundaries, with a 會議資訊 intro slide when the first entry
+is not the first unit.
+
+Returning `null` — rather than dropping a boundary — is the whole safety property. The
+`rowSpan` case that blocked S7 now takes the Range path automatically, because
+`splitTableAtSectionRows()` refuses those tables, so their section titles never become
+top-level headings and the match fails.
+
+Verified with two ESA fixtures that differ only by a `rowspan` attribute:
+
+| Fixture | strategy | slides |
+|---|---|---|
+| ESA 表格內區段標題 | `toc-plan` | 4, same titles as before |
+| ESA 表格內區段標題（含 rowspan） | `toc-fallback` | 4, same titles as before |
+
+### What The Switch Buys
+
+Overlong sections are now split. The `ESA 超長處室` fixture puts 24 rows under one
+department:
+
+| | Range path (before) | plan path (after) |
+|---|---|---|
+| slides | 3 | 5 |
+| 一、教務處 cost | **3068** (budget is 1080) | 978 + 978 + 978 |
+| measured overflow | ~2.8 screens of scrolling | 1.00 on every slide |
+| side navigation | 會議事項, 一、教務處, 二、學務處 | 會議事項, 一、教務處, 一、教務處（續 1）, 一、教務處（續 2）, 二、學務處 |
+
+Continuation slides created by `validateAndRepairHtmlSlidePlan()` inherit the split
+section's title plus 續, numbered when there is more than one, so the side navigation no
+longer shows unattributed 第 N 頁 entries between departments.
+
+`maxSlides` is raised for TOC plans (`max(24, entries + 12)`) so adjacent-merge compaction
+can never swallow a boundary the user can see in the navigation.
+
+### Full Fixture Status
+
+13 fixtures, all measured in Chrome at 1536x739:
+
+| strategy | fixtures |
+|---|---|
+| `heuristic-plan` | 9 generic shapes |
+| `toc-plan` | ESA 表格內區段標題, TOC 煙霧測試 |
+| `toc-plan-repaired` | ESA 超長處室 |
+| `toc-fallback` | ESA 表格內區段標題（含 rowspan） |
+
+Every fixture measures overflow 1.00 except the two single-large-image ones at 1.03, which
+is the expected atomic-unit case. `possibleTextMismatch` is false everywhere.
+
+Text coverage on `toc-plan` fixtures reads 94-97% rather than 100% because the department
+headings are now real top-level headings and `removeDuplicateHtmlSlideHeading()` removes
+them from the body once they become the slide title. `matchedSlideTitleTextLength`
+accounts for this, which is why `possibleTextMismatch` stays false.
+
+### Tests
+
+50 tests pass. Six new cover the TOC plan: entry-to-heading mapping with an intro slide,
+`null` when an entry has no top-level heading, `null` when entry order does not match
+heading order, no intro slide when the first entry is the first unit, continuation titles
+with numbering, and the numbering rule itself.
+
+### Remaining
+
+- ESA tables with `rowSpan` still take the Range path, so their overlong sections are still
+  unsplittable. Handling row spans in the splitter is the next step if that matters.
+- `mediaCost` is still the one uncalibrated constant (flat fallback when an image has no
+  measurable dimensions).
+- Nothing here calls AI. `aiCachePromptVersion` is untouched and no rendered slide HTML is
+  cached.

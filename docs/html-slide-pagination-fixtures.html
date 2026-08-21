@@ -147,6 +147,33 @@ validateAndRepairHtmlSlidePlan → renderHtmlSlidesFromPlan</code>，用來人�
       ).join('') + '</tbody></table>'
   });
 
+  // 轉成 plan 路徑的主要收益：過長的處室會被拆成多張，Range 路徑只會給一張看不完的。
+  fixtures.push({
+    name: 'ESA 超長處室',
+    useToc: true,
+    html: '<table><tbody>' +
+      ['一、教務處', '二、學務處'].map((title, t) =>
+        `<tr><td colspan="3">${title}</td></tr>` +
+        Array.from({ length: t === 0 ? 24 : 3 }, (_, i) =>
+          `<tr><td>案由 ${i + 1}</td><td>承辦單位</td><td>請於期限內完成並回報辦理情形</td></tr>`
+        ).join('')
+      ).join('') + '</tbody></table>'
+  });
+
+  // 帶 rowspan 的 ESA 表格：區段列提不出來，必須退回 Range 路徑而不是塌成一張。
+  fixtures.push({
+    name: 'ESA 表格內區段標題（含 rowspan）',
+    useToc: true,
+    html: '<table><tbody>' +
+      ['一、教務處', '二、學務處', '三、總務處'].map((title, t) =>
+        `<tr><td colspan="3">${title}</td></tr>` +
+        `<tr><td rowspan="2">合併儲存格</td><td>承辦單位</td><td>請於期限內完成並回報辦理情形</td></tr>` +
+        Array.from({ length: 3 }, (_, i) =>
+          `<tr><td>案由 ${i + 1}</td><td>承辦單位</td><td>請於期限內完成並回報辦理情形</td></tr>`
+        ).join('')
+      ).join('') + '</tbody></table>'
+  });
+
   // 有 TOC 的 ESA 主流程只做煙霧測試，本次工作不改它。
   fixtures.push({
     name: 'TOC 路徑（ESA 煙霧測試）',
