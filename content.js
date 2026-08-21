@@ -1286,13 +1286,19 @@ class WebReader {
     const tocPlan = this.createTocHtmlSlidePlan(entries, units);
     if (!tocPlan) return null;
 
-    const plan = this.validateAndRepairHtmlSlidePlan(
+    const repairOptions = {
+      ...options,
+      // TOC 的每一段都是使用者看得見的導覽項目，不可以被 maxSlides 合併掉。
+      maxSlides: options.maxSlides || Math.max(24, tocPlan.slides.length + 12)
+    };
+    const repaired = this.validateAndRepairHtmlSlidePlan(
       tocPlan,
       units,
       this.createSingleHtmlSlidePlan(units),
-      // TOC 的每一段都是使用者看得見的導覽項目，不可以被 maxSlides 合併掉。
-      { ...options, maxSlides: options.maxSlides || Math.max(24, tocPlan.slides.length + 12) }
+      repairOptions
     );
+    const balanced = this.rebalanceHtmlSlideTails(repaired, units, repairOptions);
+    const plan = this.mergeUnderBudgetHtmlSlides(balanced, units, repairOptions);
     const slides = this.renderHtmlSlidesFromPlan(plan, contentRoot);
     if (slides.length === 0) return null;
 
@@ -1338,7 +1344,7 @@ class WebReader {
     const lastIndex = normalizedUnits[normalizedUnits.length - 1].index;
     const slides = [];
     if (starts[0].index > firstIndex) {
-      slides.push({ start: firstIndex, end: starts[0].index - 1, title: '會議資訊' });
+      slides.push({ start: firstIndex, end: starts[0].index - 1, title: '會議資訊', generatedTitle: true });
     }
     starts.forEach((start, index) => {
       const next = starts[index + 1];
@@ -1357,7 +1363,9 @@ class WebReader {
     const units = this.extractContentUnits(contentRoot);
     const heuristicPlan = this.createHeuristicHtmlSlidePlan(units, options);
     const fallbackPlan = this.createSingleHtmlSlidePlan(units);
-    const plan = this.validateAndRepairHtmlSlidePlan(heuristicPlan, units, fallbackPlan, options);
+    const repaired = this.validateAndRepairHtmlSlidePlan(heuristicPlan, units, fallbackPlan, options);
+    const balanced = this.rebalanceHtmlSlideTails(repaired, units, options);
+    const plan = this.mergeUnderBudgetHtmlSlides(balanced, units, options);
     const slides = this.renderHtmlSlidesFromPlan(plan, contentRoot);
     if (slides.length > 0) {
       return this.finalizeHtmlSlides(slides, sourceRoot, plan.strategy || 'heuristic-plan', {
@@ -1853,7 +1861,8 @@ class WebReader {
       slides: [{
         start: units[0].index,
         end: units[units.length - 1].index,
-        title
+        title,
+        generatedTitle: true
       }]
     };
   }
@@ -1964,6 +1973,94 @@ class WebReader {
 
   // 沒有標題就回傳 null，讓燈箱沿用既有的「第 N 頁」遞補標題，
   // 避免整份簡報的側邊導覽出現一整排相同的「簡報內容」。
+  // 貪婪切分會把前面的頁塞滿、最後留下一個幾乎空白的尾巴（實測有 3 個字的續頁）。
+  // 這裡把前一頁的最後幾個單元往後挪，讓尾巴不再是孤兒。
+  // 只在「同一段落的續頁」之間挪動：續頁的標題是系統生成的，代表它跟前一頁同屬一節，
+  // 內容不會因此被掛到別的標題底下。
+  rebalanceHtmlSlideTails(plan, units, options = {}) {
+    if (!plan || !Array.isArray(plan.slides) || plan.slides.length < 2) return plan;
+    const normalizedUnits = Array.isArray(units) ? units.filter(Boolean) : [];
+    if (normalizedUnits.length === 0) return plan;
+
+    const { maxCost, minCost } = this.getHtmlSlidePlanBudget(options);
+    const slides = plan.slides.map(slide => ({ ...slide }));
+    const rangeCost = (start, end) => this.getHtmlSlideUnitsCost(
+      this.getHtmlSlideUnitsInRange(normalizedUnits, start, end)
+    );
+    let movedAny = false;
+
+    for (let index = 1; index < slides.length; index++) {
+      const previous = slides[index - 1];
+      const tail = slides[index];
+      if (tail.generatedTitle !== true) continue;
+
+      while (rangeCost(tail.start, tail.end) < minCost && previous.end > previous.start) {
+        const candidateStart = tail.start - 1;
+        if (rangeCost(candidateStart, tail.end) > maxCost) break;
+        previous.end = candidateStart - 1;
+        tail.start = candidateStart;
+        movedAny = true;
+      }
+    }
+
+    if (!movedAny) return plan;
+    return {
+      ...plan,
+      strategy: `${plan.strategy || 'plan'}-rebalanced`,
+      slides
+    };
+  }
+
+  // 合併相鄰的過短投影片。只有沒有標題、或標題是系統自己生成的（會議資訊、（續 N）、簡報內容）
+  // 那幾頁可以被併掉；使用者在側邊導覽上看得見的真實標題絕不會被吃掉。
+  mergeUnderBudgetHtmlSlides(plan, units, options = {}) {
+    if (!plan || !Array.isArray(plan.slides) || plan.slides.length < 2) return plan;
+    const normalizedUnits = Array.isArray(units) ? units.filter(Boolean) : [];
+    if (normalizedUnits.length === 0) return plan;
+
+    const { maxCost, minCost } = this.getHtmlSlidePlanBudget(options);
+    const slides = plan.slides.map(slide => ({ ...slide }));
+    const isGenerated = slide => !slide.title || slide.generatedTitle === true;
+    const costOf = slide => this.getHtmlSlideUnitsCost(
+      this.getHtmlSlideUnitsInRange(normalizedUnits, slide.start, slide.end)
+    );
+    let mergedAny = false;
+
+    for (let index = 0; index < slides.length - 1; index++) {
+      const first = slides[index];
+      const second = slides[index + 1];
+      if (!isGenerated(first) && !isGenerated(second)) continue;
+      // 只吸收「孤兒頁」，不重新填滿正常的投影片。
+      if (costOf(first) >= minCost && costOf(second) >= minCost) continue;
+
+      const combined = this.getHtmlSlideUnitsCost(
+        this.getHtmlSlideUnitsInRange(normalizedUnits, first.start, second.end)
+      );
+      if (combined > maxCost) continue;
+
+      const merged = { start: first.start, end: second.end };
+      if (!isGenerated(first)) {
+        merged.title = first.title;
+      } else if (!isGenerated(second)) {
+        merged.title = second.title;
+      } else {
+        merged.title = first.title || second.title || null;
+        merged.generatedTitle = true;
+      }
+
+      slides.splice(index, 2, merged);
+      mergedAny = true;
+      index--;
+    }
+
+    if (!mergedAny) return plan;
+    return {
+      ...plan,
+      strategy: `${plan.strategy || 'plan'}-merged`,
+      slides
+    };
+  }
+
   getContinuedHtmlSlideTitle(title, sequence = 1, total = 1) {
     const normalized = this.getNormalizedContentText({ textContent: title });
     if (!normalized) return null;
@@ -2033,7 +2130,8 @@ class WebReader {
         generatedIndex++;
         return {
           ...part,
-          title: this.getContinuedHtmlSlideTitle(baseTitle, generatedIndex, generatedTotal)
+          title: this.getContinuedHtmlSlideTitle(baseTitle, generatedIndex, generatedTotal),
+          generatedTitle: true
         };
       }));
     });

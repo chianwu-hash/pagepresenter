@@ -760,7 +760,7 @@ test('createTocHtmlSlidePlan 把 TOC 項目對回頂層標題，並覆蓋所有�
 
   assert.equal(plan.strategy, 'toc-plan');
   assert.deepEqual(plain(plan.slides), [
-    { start: 0, end: 0, title: '會議資訊' },
+    { start: 0, end: 0, title: '會議資訊', generatedTitle: true },
     { start: 1, end: 2, title: '一、教務處' },
     { start: 3, end: 4, title: '二、學務處' }
   ]);
@@ -1138,4 +1138,195 @@ test('estimateImageLayoutCost 依可用寬度縮放並套用高度上限', () =>
     reader.estimateImageLayoutCost(tall, layout, layout.bodyWidth),
     Math.round(layout.maxMediaHeight * layout.costPerPixel)
   );
+});
+
+// ---------------------------------------------------------------------------
+// 合併過短的相鄰投影片，但不吃掉導覽上看得見的標題
+// ---------------------------------------------------------------------------
+
+test('相鄰的過短投影片會被併起來，系統生成的標題可以被吃掉', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'block', title: null, cost: 110, flags: [] },
+    { index: 1, kind: 'heading', title: '一、註冊組', cost: 135, flags: ['department'] },
+    { index: 2, kind: 'block', title: null, cost: 355, flags: [] }
+  ];
+  const plan = {
+    strategy: 'toc-plan',
+    slides: [
+      { start: 0, end: 0, title: '會議資訊', generatedTitle: true },
+      { start: 1, end: 2, title: '一、註冊組' }
+    ]
+  };
+
+  const merged = reader.mergeUnderBudgetHtmlSlides(plan, units);
+
+  assert.equal(merged.strategy, 'toc-plan-merged');
+  assert.deepEqual(plain(merged.slides), [
+    { start: 0, end: 2, title: '一、註冊組' }
+  ]);
+});
+
+test('兩邊都是真實標題時絕不合併，導覽項目不會消失', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'heading', title: '四、體育組', cost: 135, flags: ['department'] },
+    { index: 1, kind: 'block', title: null, cost: 110, flags: [] },
+    { index: 2, kind: 'heading', title: '1.田徑隊', cost: 135, flags: [] },
+    { index: 3, kind: 'block', title: null, cost: 110, flags: [] }
+  ];
+  const plan = {
+    strategy: 'toc-plan',
+    slides: [
+      { start: 0, end: 1, title: '四、體育組' },
+      { start: 2, end: 3, title: '1.田徑隊' }
+    ]
+  };
+
+  const merged = reader.mergeUnderBudgetHtmlSlides(plan, units);
+
+  assert.equal(merged, plan, '沒有可併的就原樣回傳');
+});
+
+test('合併後仍超過 targetCost 的組合不會被併', () => {
+  const reader = createReader();
+  const budget = reader.getHtmlSlidePlanBudget();
+  const units = [
+    { index: 0, kind: 'block', title: null, cost: budget.targetCost, flags: [] },
+    { index: 1, kind: 'block', title: null, cost: 200, flags: [] }
+  ];
+  const plan = {
+    strategy: 'heuristic-plan',
+    slides: [
+      { start: 0, end: 0, title: null },
+      { start: 1, end: 1, title: null }
+    ]
+  };
+
+  assert.equal(reader.mergeUnderBudgetHtmlSlides(plan, units), plan);
+});
+
+test('連續多張生成標題的續頁可以一路併下去', () => {
+  const reader = createReader();
+  const units = Array.from({ length: 4 }, (_, index) => ({
+    index, kind: 'block', title: null, cost: 110, flags: []
+  }));
+  const plan = {
+    strategy: 'toc-plan',
+    slides: [
+      { start: 0, end: 0, title: '一、教學組' },
+      { start: 1, end: 1, title: '一、教學組（續 1）', generatedTitle: true },
+      { start: 2, end: 2, title: '一、教學組（續 2）', generatedTitle: true },
+      { start: 3, end: 3, title: '一、教學組（續 3）', generatedTitle: true }
+    ]
+  };
+
+  const merged = reader.mergeUnderBudgetHtmlSlides(plan, units);
+
+  assert.deepEqual(plain(merged.slides), [
+    { start: 0, end: 3, title: '一、教學組' }
+  ]);
+});
+
+test('合併結果仍是結構有效的 plan', () => {
+  const reader = createReader();
+  const units = Array.from({ length: 6 }, (_, index) => ({
+    index, kind: index % 3 === 0 ? 'heading' : 'block',
+    title: index % 3 === 0 ? `第 ${index} 節` : null,
+    cost: index % 3 === 0 ? 135 : 110, flags: []
+  }));
+  const plan = reader.createHeuristicHtmlSlidePlan(units);
+  const merged = reader.mergeUnderBudgetHtmlSlides(plan, units);
+
+  assert.ok(reader.isStructurallyValidHtmlSlidePlan(merged, units));
+});
+
+// ---------------------------------------------------------------------------
+// 尾段再平衡：貪婪切分留下的孤兒續頁
+// ---------------------------------------------------------------------------
+
+test('過短的續頁會從前一頁拉回單元，不再是孤兒', () => {
+  const reader = createReader();
+  const budget = reader.getHtmlSlidePlanBudget();
+  const units = [
+    { index: 0, kind: 'block', title: null, cost: 300, flags: [] },
+    { index: 1, kind: 'block', title: null, cost: 300, flags: [] },
+    { index: 2, kind: 'block', title: null, cost: 300, flags: [] },
+    { index: 3, kind: 'block', title: null, cost: 110, flags: [] }
+  ];
+  const plan = {
+    strategy: 'toc-plan',
+    slides: [
+      { start: 0, end: 2, title: '一、教學組' },
+      { start: 3, end: 3, title: '一、教學組（續）', generatedTitle: true }
+    ]
+  };
+
+  const balanced = reader.rebalanceHtmlSlideTails(plan, units);
+
+  assert.equal(balanced.strategy, 'toc-plan-rebalanced');
+  assert.deepEqual(plain(balanced.slides), [
+    { start: 0, end: 1, title: '一、教學組' },
+    { start: 2, end: 3, title: '一、教學組（續）', generatedTitle: true }
+  ]);
+  assert.ok(reader.isStructurallyValidHtmlSlidePlan(balanced, units));
+  const tailCost = reader.getHtmlSlideUnitsCost(reader.getHtmlSlideUnitsInRange(units, 2, 3));
+  assert.ok(tailCost >= budget.minCost, '拉回後尾段不再低於 minCost');
+});
+
+test('真實標題的下一頁不做再平衡，內容不會被搬到別的標題底下', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'block', title: null, cost: 300, flags: [] },
+    { index: 1, kind: 'block', title: null, cost: 300, flags: [] },
+    { index: 2, kind: 'heading', title: '二、生教組', cost: 135, flags: ['department'] },
+    { index: 3, kind: 'block', title: null, cost: 40, flags: [] }
+  ];
+  const plan = {
+    strategy: 'toc-plan',
+    slides: [
+      { start: 0, end: 1, title: '一、教學組' },
+      { start: 2, end: 3, title: '二、生教組' }
+    ]
+  };
+
+  assert.equal(reader.rebalanceHtmlSlideTails(plan, units), plan);
+});
+
+test('前一頁只剩一個單元時停止拉回，不會把前一頁清空', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'block', title: null, cost: 60, flags: [] },
+    { index: 1, kind: 'block', title: null, cost: 60, flags: [] }
+  ];
+  const plan = {
+    strategy: 'heuristic-plan',
+    slides: [
+      { start: 0, end: 0, title: '一、教學組' },
+      { start: 1, end: 1, title: '一、教學組（續）', generatedTitle: true }
+    ]
+  };
+
+  const balanced = reader.rebalanceHtmlSlideTails(plan, units);
+
+  assert.equal(balanced, plan, '沒有可拉回的單元就原樣回傳');
+});
+
+test('拉回後會超出 maxCost 就不拉', () => {
+  const reader = createReader();
+  const budget = reader.getHtmlSlidePlanBudget();
+  const units = [
+    { index: 0, kind: 'block', title: null, cost: 200, flags: [] },
+    { index: 1, kind: 'block', title: null, cost: budget.maxCost, flags: [] },
+    { index: 2, kind: 'block', title: null, cost: 110, flags: [] }
+  ];
+  const plan = {
+    strategy: 'toc-plan',
+    slides: [
+      { start: 0, end: 1, title: '一、教學組' },
+      { start: 2, end: 2, title: '一、教學組（續）', generatedTitle: true }
+    ]
+  };
+
+  assert.equal(reader.rebalanceHtmlSlideTails(plan, units), plan);
 });

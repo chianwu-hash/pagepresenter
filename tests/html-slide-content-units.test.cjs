@@ -308,8 +308,9 @@ test('validator falls back when a plan has gaps or reorders units', () => {
   const plan = reader.validateAndRepairHtmlSlidePlan(invalidPlan, units, fallbackPlan);
 
   assert.equal(plan.strategy, 'single-page-fallback-after-invalid-plan');
+  // generatedTitle 標記系統自己取的標題，之後的合併只會吃掉這種。
   assert.deepEqual(plain(plan.slides), [
-    { start: 0, end: 2, title: '簡報內容' }
+    { start: 0, end: 2, title: '簡報內容', generatedTitle: true }
   ]);
 });
 
@@ -401,6 +402,6 @@ test('validator repairs overlong multi-unit slides with heuristic slices', () =>
   // 被拆開的續頁沿用原標題加「（續）」，導覽才看得出歸屬。
   assert.deepEqual(plain(plan.slides), [
     { start: 0, end: 1, title: '一、長文' },
-    { start: 2, end: 3, title: '一、長文（續）' }
+    { start: 2, end: 3, title: '一、長文（續）', generatedTitle: true }
   ]);
 });

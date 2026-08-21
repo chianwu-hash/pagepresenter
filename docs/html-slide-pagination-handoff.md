@@ -1159,3 +1159,65 @@ loses or reorders content.
 The AI run itself took about 50 seconds and Gemini returned 7257 characters. The reader's
 own safeguard fired during it — "AI 重點版改動了內容，已只保留重點位置並套回格式化版本" —
 which is existing behaviour, not something this work introduced.
+
+---
+
+## S15: Absorbing Orphan Slides Without Eating Navigation Labels
+
+`html-slide-ai-plan-design.md` recommended landing the adjacent-merge pass first, since it
+needs no AI. Measuring the real meetings first showed the problem was actually two:
+
+| symptom | measured |
+|---|---|
+| a slide whose whole body is 3 characters | 「三、教學組（續 3）」 on meeting 4611 |
+| a section that is one short line | 「三、親職組」, 42 characters |
+| slides under `minCost` | 5 on 4611, 6 on 4622 |
+
+### The Rule That Matters
+
+Merging is only safe if it never removes a label the user navigates by. Plan slides now
+carry `generatedTitle: true` when the title was invented by the system — the 會議資訊 intro,
+a `（續 N）` continuation, the 簡報內容 fallback. **Only those can be absorbed.** A slide
+titled from real content is never merged away, which is why 「三、親職組」 is still its own
+slide and should be.
+
+An AI-produced plan carries no such marker, so every title a model chooses counts as real
+and is likewise safe from merging.
+
+### Two Passes
+
+`rebalanceHtmlSlideTails()` runs first. Greedy chunking fills the early slides and leaves
+whatever remains in the last one, which is how a 3-character slide happens. It pulls units
+back from the previous slide until the tail clears `minCost`, and only across a boundary
+whose second side is a `（續 N）` continuation — same section, so nothing lands under the
+wrong heading.
+
+`mergeUnderBudgetHtmlSlides()` runs second and absorbs what is left: an adjacent pair where
+one side is under `minCost`, at least one side has a generated title, and the combined cost
+stays within `maxCost`. It deliberately does not repack slides that are already reasonable —
+the guard is `costOf(first) >= minCost && costOf(second) >= minCost → skip`.
+
+### Result
+
+| | before | after |
+|---|---|---|
+| meeting 4611 slides under `minCost` | 5 | **1** |
+| meeting 4622 slides under `minCost` | 6 | **2** |
+| worst overflow, both meetings | 1.00 | 1.00 |
+| `overlongSlideCount` | 0 | 0 |
+| `possibleTextMismatch` | false | false |
+| unit coverage | 0 missing, 0 out of order | 0 missing, 0 out of order |
+
+Strategy strings now read `toc-plan-repaired-rebalanced-merged`, so which passes fired is
+visible in the metrics.
+
+Every remaining short slide on both meetings has a real section title. All 14 fixtures keep
+their strategy, slide count and overflow.
+
+### Tests
+
+75 tests pass. Nine new: merging a generated-title slide, refusing to merge two real
+titles, refusing when the combination exceeds `maxCost`, chaining consecutive continuations,
+structural validity after merging, pulling units back into a short tail, refusing to
+rebalance across a real title, refusing to empty the previous slide, and refusing a pull-back
+that would exceed `maxCost`.
