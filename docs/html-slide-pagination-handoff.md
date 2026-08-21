@@ -152,22 +152,27 @@ Current defaults:
 
 ## Current Runtime Behavior
 
-In `buildHtmlSlidesFromCurrentContent()`:
+> Superseded by S4-S17 below. The routing described in this section was the S0-S3
+> state and no longer matches the code; it is kept only to show what changed.
 
-- If TOC entries exist, current TOC fallback behavior is preserved.
-- If no TOC entries exist, the no-TOC path now uses:
+Today `buildHtmlSlidesFromCurrentContent()` routes like this:
 
 ```text
-extractContentUnits(sourceRoot)
-→ createHeuristicHtmlSlidePlan(units)
-→ validateAndRepairHtmlSlidePlan(...)
-→ renderHtmlSlidesFromPlan(plan, sourceRoot)
+createHtmlSlidePlanningRoot(sourceRoot)   resolve the real content root, clone it,
+                                          normalise oversized lists/tables/paragraphs
+→ extractContentUnits(contentRoot)
+→ base plan:
+     TOC page  → cached AI plan (boundaries restored) or createTocHtmlSlidePlan()
+     no TOC    → cached AI plan or createHeuristicHtmlSlidePlan()
+→ validateAndRepairHtmlSlidePlan()   split anything over budget
+→ rebalanceHtmlSlideTails()          pull units back into an orphan tail
+→ mergeUnderBudgetHtmlSlides()       absorb orphans, never a real title
+→ renderHtmlSlidesFromPlan(plan, contentRoot)
 ```
 
-This is intentionally conservative:
-
-- ESA / meeting pages with TOC should remain behaviorally stable.
-- Generic pages without reliable TOC can start benefiting from heuristic pagination.
+If a TOC boundary cannot be represented as a top-level index — an ESA section row under a
+`rowSpan`, for instance — the whole page falls back to the original Range renderer,
+`buildHtmlSlidesFromTocRanges()`, which is unchanged.
 
 ## Tests
 
@@ -190,7 +195,8 @@ npm run check
 
 Latest result:
 
-- `npm run test:html-slides`: 12 tests passed
+- `npm run test:html-slides`: **90 tests passed** (two `.cjs` files plus
+  `tests/helpers/fake-dom.cjs`)
 - `npm run check`: passed
 
 Note:
@@ -201,39 +207,54 @@ Note:
 ## Important Risks
 
 - `renderHtmlSlidesFromPlan()` assumes `unit.index === contentDom.children[index]`.
+  Everything downstream depends on it, including the AI contract.
 - Do not filter units after extraction unless preserving index alignment.
-- `possibleTextMismatch` is currently observational only; it does not block rendering.
-- `matchedSlideTitleTextLength` compensates for headings removed by `removeDuplicateHtmlSlideHeading()`, but it is still a heuristic.
-- The no-TOC heuristic path should be visually checked on real pages.
-- The TOC path has not yet been converted to plan rendering; this was intentional to reduce behavior risk.
+- `possibleTextMismatch` is observational only; it does not block rendering. It has stayed
+  false on every fixture and every real meeting measured, so treat a `true` as a real
+  regression signal.
+- `matchedSlideTitleTextLength` compensates for headings removed by
+  `removeDuplicateHtmlSlideHeading()`. It only counts a title as removed when the slide body
+  no longer contains it (S6) — do not loosen that, it caused a false positive once already.
+- The unit list is **viewport dependent**, because DOM normalisation is sized by the current
+  budget. `getHtmlSlidePlanUnitSignature()` therefore gates the cached AI plan: reopen the
+  lightbox at a very different window size and the plan will not apply, and the heuristic
+  runs instead. Correct, but it means an AI plan helps at the size it was made for.
 
 ## Suggested Next Work
 
-Recommended next milestone:
+The original list here (fixtures, visual checks, converting the TOC path, deciding on AI)
+is complete — S4 through S17. What is actually open:
 
-1. Add browser/manual verification fixtures for no-TOC generic pages.
-2. Create or reuse static HTML samples:
-   - long article with no headings
-   - one `h1` only
-   - all `div` content
-   - table-only page
-   - list-heavy page
-3. Use the actual extension UI or a browser fixture to confirm:
-   - no-TOC pages now split into multiple useful slides
-   - side navigation still works
-   - lightbox rendering area remains stable
-   - metrics show reasonable unit/slide cost distribution
-4. If visual behavior is acceptable, consider converting the TOC path into an equivalent plan-rendering path as a separate safe refactor.
-5. Only after S0-S3 are visually verified, decide whether AI slide-plan calls are worth adding.
+1. **Nested tables stay atomic.** `getSplittableTable()` refuses them because their
+   structure is not knowable from outside. A Wikipedia-style infobox therefore lands on one
+   slide however tall it is.
+2. **A single block taller than a screen cannot be paginated.** On a long Wikipedia article
+   18 of 29 scrolling slides were exactly that, the worst 5397px — about 8.6 screens. Fixing
+   it means unwrapping layout tables in the reader's offline formatter, which is a
+   reader-side product decision, not a planner one. Meeting content does not hit this.
+3. **The AI plan has no user-facing switch.** `htmlSlidePlanEnabled` exists but nothing
+   toggles it, so every AI run pays for one extra request.
+4. **The 0.95 safety factor** in `getHtmlSlidePlanBudget()` is a judgement call, not a
+   measurement. Lowering it would absorb the last few percent of overflow at the cost of
+   slightly emptier slides.
+5. **Only Gemini is wired.** The plan request hardcodes `gemini-3.5-flash`; the OpenAI path
+   in the extension has no equivalent.
+## Standing Constraints
 
-## Do Not Do Yet
+Still binding, and all three are verified as held at HEAD:
 
-- Do not add AI slide-plan calls yet.
-- Do not bump `aiCachePromptVersion`.
-- Do not store rendered slide HTML in cache.
-- Do not allow non-adjacent reorder.
-- Do not replace the existing TOC path until equivalence is tested.
-- Do not rewrite the old test system unless asked.
+- Do not bump `aiCachePromptVersion`, and do not change the shape of `webReaderAICache`
+  entries. The AI slide plan lives in its own `webReaderSlidePlanCache` store.
+- Do not store rendered slide HTML in any cache.
+- Do not allow non-adjacent reorder. Only adjacent merge, adjacent split and overlong
+  repair. `isStructurallyValidHtmlSlidePlan()` rejects anything else, including from the AI.
+- Do not rewrite the old test system. `tests/*.test.js` are untouched.
+
+Two items from the original list are now done and are recorded above:
+
+- ~~Do not add AI slide-plan calls yet.~~ Approved and shipped — S16, S17.
+- ~~Do not replace the existing TOC path until equivalence is tested.~~ Replaced in S8,
+  with the Range renderer kept as the automatic fallback.
 
 ## Useful File References
 
