@@ -1487,3 +1487,96 @@ test('prompt 會把必要邊界交給模型', () => {
   assert.deepEqual(plain(payload.requiredStarts), [0, 2]);
   assert.match(prompt, /requiredStarts/);
 });
+
+test('段落夾著圖片時，文字與圖片都要計價', () => {
+  const reader = createReader();
+  const layout = reader.getHtmlSlideLayoutMetrics();
+  const image = new FakeElement({ tagName: 'img', className: 'reader-image' });
+  image.naturalWidth = 32;
+  image.naturalHeight = 32;
+  const paragraph = new FakeElement({
+    tagName: 'p',
+    className: 'reader-paragraph',
+    children: [new FakeText('請導師們於期限前將申請表送回教務處'), image]
+  });
+  const textOnly = new FakeElement({
+    tagName: 'p',
+    className: 'reader-paragraph',
+    text: '請導師們於期限前將申請表送回教務處'
+  });
+
+  const withImage = reader.estimateHtmlContentCost(paragraph);
+  const plainText = reader.estimateHtmlContentCost(textOnly);
+
+  assert.ok(withImage > plainText, '夾了圖片一定比純文字貴');
+  // 文字的部分不可以被吃掉
+  assert.ok(withImage >= plainText, `${withImage} >= ${plainText}`);
+  assert.equal(
+    withImage,
+    reader.estimateHtmlContentCost(image) + layout.lineCost + layout.blockCost
+  );
+});
+
+test('getOwnTextContent 只取自己的文字，不含區塊子節點', () => {
+  const reader = createReader();
+  const inner = new FakeElement({ tagName: 'p', className: 'reader-paragraph', text: '子區塊文字' });
+  const wrapper = new FakeElement({
+    tagName: 'div',
+    children: [new FakeText('外層前段'), inner, new FakeText('外層後段')]
+  });
+
+  assert.equal(reader.getOwnTextContent(wrapper, [inner]), '外層前段外層後段');
+  assert.equal(reader.getOwnTextContent(wrapper, []), '外層前段子區塊文字外層後段');
+});
+
+test('AI 漏掉的 TOC 邊界會被補回來，而不是整份丟棄', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'heading', title: '會議事項', cost: 135, flags: [] },
+    { index: 1, kind: 'heading', title: '一、主任報告', cost: 135, flags: ['department'] },
+    { index: 2, kind: 'block', title: null, cost: 300, flags: [] },
+    { index: 3, kind: 'heading', title: '二、教學組', cost: 135, flags: ['department'] },
+    { index: 4, kind: 'block', title: null, cost: 300, flags: [] }
+  ];
+  const required = [0, 1, 3];
+  // AI 把 0 和 1 併成一頁，漏掉邊界 1
+  const aiSlides = [
+    { start: 0, end: 2, title: '教務處主任報告' },
+    { start: 3, end: 4, title: '教學組 評量與本土語' }
+  ];
+
+  assert.equal(reader.isHtmlSlidePlanRespectingStarts(aiSlides, required), false);
+
+  const restored = reader.restoreRequiredHtmlSlideStarts(aiSlides, required, units);
+
+  assert.equal(reader.isHtmlSlidePlanRespectingStarts(restored, required), true);
+  assert.ok(reader.isStructurallyValidHtmlSlidePlan({ slides: restored }, units));
+  assert.deepEqual(plain(restored.map(s => s.start + '-' + s.end)), ['0-0', '1-2', '3-4']);
+  // AI 的標題留在原本的起點，補出來的那頁從內容取標題
+  assert.equal(restored[0].title, '教務處主任報告');
+  assert.equal(restored[1].title, '一、主任報告');
+  assert.equal(restored[2].title, '教學組 評量與本土語');
+});
+
+test('補回的頁若內容取不到標題就沿用原標題加續', () => {
+  const reader = createReader();
+  const units = [
+    { index: 0, kind: 'block', title: null, cost: 200, flags: [] },
+    { index: 1, kind: 'block', title: null, cost: 200, flags: [] }
+  ];
+  const restored = reader.restoreRequiredHtmlSlideStarts(
+    [{ start: 0, end: 1, title: 'AI 標題' }], [0, 1], units);
+
+  assert.deepEqual(plain(restored), [
+    { start: 0, end: 0, title: 'AI 標題' },
+    { start: 1, end: 1, title: 'AI 標題（續）', generatedTitle: true }
+  ]);
+});
+
+test('沒有漏掉邊界時原樣回傳', () => {
+  const reader = createReader();
+  const units = planUnits(4);
+  const slides = [{ start: 0, end: 1, title: 'A' }, { start: 2, end: 3, title: 'B' }];
+
+  assert.equal(reader.restoreRequiredHtmlSlideStarts(slides, [0, 2], units), slides);
+});

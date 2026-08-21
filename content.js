@@ -1301,11 +1301,17 @@ class WebReader {
     // AI 分頁只有在完整保留每個 TOC 邊界時才採用；否則用 TOC 自己的分頁。
     const aiSlides = options.aiSlides || this.cachedHtmlSlidePlan || null;
     const requiredStarts = tocPlan.slides.map(slide => slide.start);
-    const basePlan = aiSlides &&
-      this.isStructurallyValidHtmlSlidePlan({ slides: aiSlides }, units) &&
-      this.isHtmlSlidePlanRespectingStarts(aiSlides, requiredStarts)
-      ? { strategy: 'toc-ai-plan', slides: aiSlides }
-      : tocPlan;
+    let basePlan = tocPlan;
+    if (aiSlides && this.isStructurallyValidHtmlSlidePlan({ slides: aiSlides }, units)) {
+      const restored = this.restoreRequiredHtmlSlideStarts(aiSlides, requiredStarts, units);
+      if (this.isStructurallyValidHtmlSlidePlan({ slides: restored }, units) &&
+        this.isHtmlSlidePlanRespectingStarts(restored, requiredStarts)) {
+        basePlan = {
+          strategy: restored.length === aiSlides.length ? 'toc-ai-plan' : 'toc-ai-plan-restored',
+          slides: restored
+        };
+      }
+    }
     const repaired = this.validateAndRepairHtmlSlidePlan(
       basePlan,
       units,
@@ -2102,6 +2108,31 @@ class WebReader {
     return tocPlan.slides.map(slide => slide.start);
   }
 
+  // AI 常常只漏掉一兩個邊界（實測 17 個命中 16 個）。為了一個邊界丟掉整份計畫太浪費，
+  // 改成在缺漏處把該頁切開 —— 那是相鄰切分，仍然沒有重排，導覽邊界也回來了。
+  restoreRequiredHtmlSlideStarts(slides, requiredStarts, units) {
+    const missing = (requiredStarts || []).filter(
+      start => !slides.some(slide => slide.start === start));
+    if (missing.length === 0) return slides;
+
+    const restored = slides.map(slide => ({ ...slide }));
+    missing.forEach(start => {
+      const index = restored.findIndex(slide => slide.start < start && slide.end >= start);
+      if (index < 0) return;
+      const slide = restored[index];
+      const tailUnits = this.getHtmlSlideUnitsInRange(units, start, slide.end);
+      const contentTitle = this.getHtmlSlidePlanTitle(tailUnits);
+      const tail = {
+        start,
+        end: slide.end,
+        title: contentTitle || this.getContinuedHtmlSlideTitle(slide.title)
+      };
+      if (!contentTitle) tail.generatedTitle = true;
+      restored.splice(index, 1, { ...slide, end: start - 1 }, tail);
+    });
+    return restored;
+  }
+
   // AI 的分頁必須把每個必要邊界都當成某一頁的起點，否則整份丟棄。
   isHtmlSlidePlanRespectingStarts(slides, requiredStarts) {
     if (!Array.isArray(requiredStarts) || requiredStarts.length === 0) return true;
@@ -2669,7 +2700,31 @@ class WebReader {
       return this.estimateTextElementLayoutCost(element, layout, style.blockCost, style.scale);
     }
 
-    return blockChildren.reduce((sum, child) => sum + this.estimateHtmlLayoutCost(child), 0);
+    // 區塊子節點之外，元素自己還可能有文字（例如段落中夾了一張圖示，
+    // styles.css 讓投影片內的 img 變成 display:block，那段文字就會被漏算）。
+    const childrenCost = blockChildren.reduce(
+      (sum, child) => sum + this.estimateHtmlLayoutCost(child), 0);
+    const ownText = this.getOwnTextContent(element, blockChildren);
+    if (!ownText) return childrenCost;
+
+    const ownStyle = this.getHtmlSlideTextStyle(element, layout);
+    return childrenCost +
+      this.estimateTextBlockLayoutCost(ownText, layout, ownStyle.blockCost, ownStyle.scale);
+  }
+
+  // 只取元素自己的文字，不含已經另外計價的區塊子節點。
+  getOwnTextContent(element, blockChildren) {
+    const skip = new Set(blockChildren || []);
+    let text = '';
+    const visit = node => {
+      Array.from(node?.childNodes || []).forEach(child => {
+        if (child.nodeType === 3) { text += child.nodeValue || ''; return; }
+        if (child.nodeType !== 1 || skip.has(child)) return;
+        visit(child);
+      });
+    };
+    visit(element);
+    return text.replace(/\s+/g, ' ').trim();
   }
 
   isHtmlSlideLayoutBlock(element) {

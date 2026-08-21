@@ -1311,3 +1311,80 @@ from its deep link. Ticking 114學年度 in the meeting list is the way back in.
 markdown fence, gaps, overlaps, reordering, incomplete coverage, non-integer indexes,
 non-JSON replies, title normalisation and truncation, AI titles surviving the merge pass,
 the unit signature, the prompt payload, and the TOC-boundary rule.
+
+---
+
+## S17: The AI Plan On A Real ESA Meeting
+
+S16 proved the round trip on the demo page. This is the same thing on a live meeting record
+(0826實體教師週會, 126 units, 16 TOC sections), driven through the real extension with a
+real Gemini call, and it surfaced two things the demo page could not.
+
+### Navigating There
+
+Open the meeting module from the shell (`會議管理`), then click the meeting's name link.
+The year filter is a checkbox **in front of** the select — tick it, then press 查詢. The
+default list already carries recent meetings, which is enough for testing.
+
+Order matters: reload the extension **first**, then reload the tab, then navigate. Doing it
+the other way round invalidates the content script and costs another round trip. Reloading
+`chrome://extensions` itself is sometimes needed before its reload button responds.
+
+### A Cost Model Gap: Text Beside A Block Child
+
+The meeting overflowed at 1.11 on two slides. The cause: a paragraph containing an inline
+icon. `styles.css` forces `display: block` on every image in a slide, so the `<img>` counts
+as a block child — and the model, on seeing any block child, costed **only the children and
+threw the element's own text away**. A 22-character paragraph was costed as the 32px icon
+alone.
+
+`getOwnTextContent()` now collects the text that is not inside an already-costed block
+child, and it is charged on top. That took the meeting from 1.11 to **1.02**.
+
+The fake DOM had been hiding this: elements built with the `text:` convenience had no text
+node, so `childNodes` traversal saw nothing. It now creates a real text node, and
+`cloneNode(false)` no longer carries text — matching the real DOM, where a shallow clone
+drops its children.
+
+### Rejecting A Whole Plan Over One Boundary Is Too Strict
+
+The model returned 21 slides and hit **16 of the 17 required starts**. It had merged two
+adjacent headings — semantically reasonable — which dropped one navigation boundary, and
+the all-or-nothing rule threw the entire plan away.
+
+`restoreRequiredHtmlSlideStarts()` now splits the offending slide at each missing start
+instead. That is an adjacent split, so nothing is reordered, and the boundary comes back.
+The AI's title stays with the original start; the restored page takes its title from its own
+content, falling back to a 續 label. The strategy string records it as
+`toc-ai-plan-restored`.
+
+### Result
+
+| | heuristic | AI plan |
+|---|---|---|
+| strategy | `toc-plan-repaired-merged` | `toc-ai-plan-restored-repaired-rebalanced` |
+| slides | 38 | 40 |
+| worst overflow | 1.02 | **1.00** |
+| over budget / text mismatch | 0 / false | 0 / false |
+| unit coverage | — | 126 units, 0 missing, 0 out of order |
+
+The side navigation is the point:
+
+| heuristic | AI |
+|---|---|
+| 二、教學組（續 1…4） | 教學組 評量與本土語 / 競賽與公佈欄 / 行政與教學宣導 |
+| 四、衛生組（續 1…6） | 衛生組 校園消毒與午餐 / 資源回收與掃具更新 / 掃區與各處室公告 |
+| 三、生教組 → 1.…5.【班級】 | 生教組 返校日交通事項 / 午餐與放學注意事項 / 防災演練事項 / 暑假作業注意事項 |
+
+A few `（續 N）` labels remain where the repair pass split an AI-titled section that still
+exceeded the budget. That is the intended division of labour: the model decides meaning, the
+validator enforces fit.
+
+### Tests
+
+90 tests pass. Five new: a block's own text counted beside its block children,
+`getOwnTextContent()` itself, restoring a missing boundary with titles assigned correctly,
+the fallback when the restored page has no content title, and the no-op when nothing is
+missing.
+
+All 14 fixtures keep their strategy, slide count and overflow.

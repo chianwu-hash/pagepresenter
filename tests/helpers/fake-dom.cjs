@@ -54,6 +54,8 @@ class FakeElement {
     this.parentNode = null;
     this._nodes = [];
     this._text = text;
+    // text 便利參數要變成真正的文字節點，否則 childNodes 走訪會看不到它。
+    if (text) this.appendChild(new FakeText(text));
     children.forEach(child => this.appendChild(child));
   }
 
@@ -84,6 +86,7 @@ class FakeElement {
     this._nodes.forEach(child => { child.parentNode = null; });
     this._nodes = [];
     this._text = String(value);
+    if (this._text) this.appendChild(new FakeText(this._text));
   }
 
   get nextSibling() {
@@ -142,10 +145,10 @@ class FakeElement {
   }
 
   cloneNode(deep = false) {
+    // 淺拷貝不帶文字，跟真實 DOM 一致；文字是子節點，只有 deep 才複製。
     const clone = new FakeElement({
       tagName: this.tagName,
       className: this.className,
-      text: this._text,
       dataset: this.dataset,
       attributes: this.attributes
     });
